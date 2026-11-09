@@ -78,6 +78,7 @@ DriveAtlas keeps one catalog of every storage device you own. Plug a drive in on
 **Yours, everywhere**
 - Android app with a full offline copy
 - Syncs with your PC over your own Wi-Fi, encrypted
+- Helper mode: other Windows PCs join your catalog and scan the drives plugged into them
 - One backup file restores everything on a new laptop
 - Dark and light mode on both apps
 
@@ -128,7 +129,7 @@ DriveAtlas keeps one catalog of every storage device you own. Plug a drive in on
 | --- | --- | --- |
 | 0 · Design | Design sheet, UI mockups for Windows and Android | Done |
 | 1 · PC app | Hub, drive catalog, plug-in and change detection, scanning, file browser, search, partitions, health, backup and restore | In progress |
-| 2 · Android and sync | APK built by GitHub Actions, QR pairing, same Wi-Fi sync, offline copy, OTG scanning | Planned |
+| 2 · Android, helpers and sync | APK built by GitHub Actions, QR pairing, same Wi-Fi sync, offline copy, OTG scanning, helper PCs | Planned |
 | 3 · Organize and insights | Locations and lent-out, QR labels, reminders, duplicates, scan history, charts, exports | Planned |
 
 Full details: [design sheet](docs/DriveAtlas-Design-Sheet.md) ([PDF](docs/DriveAtlas-Design-Sheet.pdf)).
