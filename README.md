@@ -147,14 +147,36 @@ Full details: [design sheet](docs/DriveAtlas-Design-Sheet.md) ([PDF](docs/DriveA
 
 ## Getting started
 
-The PC app is being built now (Phase 1). Setup steps will land here with the first release.
+The first part of the PC app works today: account, drive catalog, plug-in detection and change detection. Scanning, search, health and backups are being added next.
 
-**You will need:** Windows 10 or 11, Node.js 22 or newer, and Microsoft Edge or Google Chrome. Android 9 or newer for the phone app.
+**You will need:** Windows 10 or 11, [Node.js](https://nodejs.org) 22 or newer, and Microsoft Edge or Google Chrome. Nothing else to install.
+
+1. Download or clone this repository.
+2. Double-click **`DriveAtlas.vbs`**. DriveAtlas opens in its own window.
+3. Create your account, then add the drives listed under **Connected now**. Their details are filled in for you.
+4. Optional: add DriveAtlas to the Start menu (no admin needed):
+
+   ```bash
+   powershell -ExecutionPolicy Bypass -File app/scripts/install.ps1
+   ```
+
+   Add `-Startup` to start the hub when you sign in, or `-Uninstall` to remove the shortcuts.
+
+Your catalog lives in `%LOCALAPPDATA%\DriveAtlas\data`, outside this folder, so updating the app never touches it. `DriveAtlas.cmd` starts the same app with a visible log window for troubleshooting.
+
+**For developers:** `cd app` then `npm run check` runs the smoke test against your own drives with a throwaway catalog.
 
 ## Project structure
 
 ```
 DriveAtlas/
+├── DriveAtlas.vbs             Double-click to start (no console window)
+├── app/
+│   ├── hub/                   Node.js hub: web server, catalog database, drive detection
+│   │   └── ps/                PowerShell scripts that read disks (read-only)
+│   ├── ui/                    The interface (Preact + htm, plain CSS)
+│   ├── shared/                Drive types and formatting used by hub and interface
+│   └── scripts/               Smoke test, Start menu installer, icon and vendor tools
 ├── docs/                      Design sheet (Markdown, HTML, PDF), diagrams, logo
 ├── design/
 │   ├── canvas/project/        Editable UI mockup sources

@@ -1,0 +1,21 @@
+{
+  "name": "driveatlas",
+  "version": "0.1.0",
+  "private": true,
+  "description": "DriveAtlas hub and app: a private catalog of every drive you own and every file on it.",
+  "type": "module",
+  "engines": {
+    "node": ">=22.13"
+  },
+  "scripts": {
+    "start": "node --disable-warning=ExperimentalWarning hub/main.mjs",
+    "open": "node --disable-warning=ExperimentalWarning hub/main.mjs --open",
+    "vendor": "node scripts/vendor.mjs",
+    "check": "node --disable-warning=ExperimentalWarning scripts/check.mjs"
+  },
+  "devDependencies": {
+    "htm": "3.1.1",
+    "preact": "10.26.4"
+  },
+  "license": "SEE LICENSE IN ../LICENSE.md"
+}
