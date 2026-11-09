@@ -285,6 +285,8 @@ export function withLive(db, disks) {
   const parts = db.prepare('SELECT drive_id, SUM(COALESCE(used, 0)) AS used, SUM(CASE WHEN filesystem IS NOT NULL THEN size ELSE 0 END) AS fs_size FROM partitions GROUP BY drive_id').all();
   const usage = new Map(parts.map((p) => [p.drive_id, p]));
   const pending = new Set(db.prepare('SELECT drive_id FROM pending_changes').all().map((r) => r.drive_id));
+  const scanned = new Map(db.prepare('SELECT drive_id, SUM(file_count) AS files, COUNT(*) AS partitions FROM scans WHERE is_current = 1 GROUP BY drive_id').all()
+    .map((r) => [r.drive_id, r]));
   const live = new Map();
   for (const disk of disks) {
     const d = matchDisk(drives, disk);
@@ -304,6 +306,8 @@ export function withLive(db, disks) {
       used: u ? u.used : null,
       total,
       hasPendingChanges: pending.has(d.id),
+      files: scanned.get(d.id)?.files ?? null,
+      scannedPartitions: scanned.get(d.id)?.partitions ?? 0,
       liveStatus: disk ? (disk.internal ? 'inpc' : 'plugged') : d.status
     };
   });

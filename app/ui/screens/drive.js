@@ -3,7 +3,7 @@ import { html, useState, useEffect, api, go } from '../lib.js';
 import { Icon, Card, TypeTile, StatusPill, HealthPill, BootPill, CapacityBar, UsageLine, Button, Pill, ErrorNote } from '../components.js';
 import { DriveForm } from './drive-form.js';
 import { typeById, BOOT_KINDS, statusName } from '/shared/drive-types.js';
-import { fmtBytes, fmtAdvertised, fmtDate, timeAgo } from '/shared/format.js';
+import { fmtBytes, fmtAdvertised, fmtDate, fmtNumber, timeAgo } from '/shared/format.js';
 
 export function DrivePage({ id, data, onChanged }) {
   const [state, setState] = useState({ loading: true });
@@ -11,7 +11,8 @@ export function DrivePage({ id, data, onChanged }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
 
-  const load = () => api('GET', `/api/drives/${id}`).then((r) => setState({ drive: r.drive, disk: r.disk })).catch((err) => setState({ error: err.message }));
+  const load = () => Promise.all([api('GET', `/api/drives/${id}`), api('GET', `/api/drives/${id}/scans`)])
+    .then(([r, s]) => setState({ drive: r.drive, disk: r.disk, scans: s.current })).catch((err) => setState({ error: err.message }));
   useEffect(() => { setMode('view'); load(); }, [id, data.version]);
 
   if (state.loading) return html`<div class="page"><p class="muted">Loading…</p></div>`;
@@ -31,6 +32,12 @@ export function DrivePage({ id, data, onChanged }) {
       setMode('view');
       await load();
     } catch (err) { setError(err.message); } finally { setBusy(false); }
+  }
+
+  async function scanNow() {
+    setBusy(true);
+    setError('');
+    try { await api('POST', `/api/drives/${id}/scan`, {}); go('#/scan'); } catch (err) { setError(err.message); setBusy(false); }
   }
 
   async function remove() {
@@ -53,6 +60,7 @@ export function DrivePage({ id, data, onChanged }) {
           ${d.label_code ? html`<${Pill} tone="plain" icon="qr">${d.label_code}</${Pill}>` : null}</div>
       </div>
       ${mode === 'view' ? html`<div class="actions">
+        ${d.connected ? html`<${Button} kind="primary" icon="scan" disabled=${busy} onClick=${scanNow}>${state.scans.length ? 'Scan again' : 'Scan now'}</${Button}>` : null}
         <${Button} icon="edit" onClick=${() => setMode('edit')}>Edit</${Button}>
         <${Button} icon="trash" kind="danger" onClick=${() => setMode('delete')}>Delete</${Button}>
       </div>` : null}
@@ -72,10 +80,18 @@ export function DrivePage({ id, data, onChanged }) {
     </${Card}>` : html`
     <div class="columns">
       <div class="col-main stack-lg">
+        ${mode === 'view' && error ? html`<${ErrorNote} error=${error} />` : null}
         <${Card} id="h-space" title="Space">
           <${CapacityBar} used=${d.used} total=${d.total} thick />
           <div class="mt6"><${UsageLine} used=${d.used} total=${d.total} /></div>
-          <p class="small muted">${d.connected ? 'Live from Windows right now.' : `Last seen ${timeAgo(d.last_seen_at)}.`} File lists arrive with scanning in the next update.</p>
+          <p class="small muted">${d.connected ? 'Live from Windows right now.' : `Last seen ${timeAgo(d.last_seen_at)}.`}</p>
+        </${Card}>
+        <${Card} id="h-files" title="Files" extra=${state.scans.length ? html`<a class="link push small" href=${`#/files/${d.id}`}>Browse files</a>` : null}>
+          ${state.scans.length ? html`<div class="stack-sm">${state.scans.map((s) => html`<a class="scan-line" href=${`#/files/${d.id}?scan=${s.id}&dir=0`}>
+              <${Icon} name="folder" size=${18} /><strong>${s.partition_label || `Partition ${s.partition_idx}`}</strong>
+              <span class="muted small num">${fmtNumber(s.file_count)} files · ${fmtNumber(s.folder_count)} folders · ${fmtBytes(s.total_bytes)} · scanned ${timeAgo(s.finished_at)}</span>
+            </a>`)}</div>`
+          : html`<p class="small muted mt0">${d.connected ? 'Not scanned yet. Scan it to record its folders and files; nothing is copied.' : 'Not scanned yet. Plug it in to scan it.'}</p>`}
         </${Card}>
         <${Card} id="h-parts" title="Partitions" extra=${html`<span class="muted small">${d.partition_style || ''}${d.partitions.length ? ` · ${d.partitions.length}` : ''}</span>`}>
           ${d.partitions.length ? html`<div class="table-wrap"><table class="table">

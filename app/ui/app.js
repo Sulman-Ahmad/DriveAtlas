@@ -6,6 +6,10 @@ import { Home } from './screens/home.js';
 import { Drives } from './screens/drives.js';
 import { AddDrive } from './screens/add.js';
 import { DrivePage } from './screens/drive.js';
+import { Search } from './screens/search.js';
+import { Files } from './screens/files.js';
+import { Scan } from './screens/scan.js';
+import { fmtNumber, fmtBytes } from '/shared/format.js';
 
 function parseRoute(hash) {
   const [path, qs] = (hash.replace(/^#/, '') || '/').split('?');
@@ -43,14 +47,14 @@ function App() {
 
 function Main({ state, onSignedOut, onTheme }) {
   const route = useHashRoute();
-  const [data, setData] = useState({ summary: null, connected: [], drives: [], ready: false, version: 0 });
+  const [data, setData] = useState({ summary: null, connected: [], drives: [], ready: false, version: 0, scanStatus: null, lastScan: null });
   const [toasts, setToasts] = useState([]);
   const toastId = useRef(0);
 
   async function refresh() {
     try {
-      const [summary, connected, drives] = await Promise.all([api('GET', '/api/summary'), api('GET', '/api/connected'), api('GET', '/api/drives')]);
-      setData((d) => ({ summary, connected: connected.disks, drives: drives.drives, ready: connected.ready, version: d.version + 1 }));
+      const [summary, connected, drives, scanStatus] = await Promise.all([api('GET', '/api/summary'), api('GET', '/api/connected'), api('GET', '/api/drives'), api('GET', '/api/scans')]);
+      setData((d) => ({ ...d, summary, connected: connected.disks, drives: drives.drives, ready: connected.ready, scanStatus, version: d.version + 1 }));
     } catch (err) {
       if (err.status === 401) onSignedOut();
     }
@@ -79,6 +83,18 @@ function Main({ state, onSignedOut, onTheme }) {
       const p = JSON.parse(e.data);
       toast({ icon: 'plus', title: 'New drive found', body: `${p.friendlyName}${p.letters.length ? ` on ${p.letters.map((l) => `${l}:`).join(' ')}` : ''}. Add it with its details filled in.`, href: `#/add?disk=${encodeURIComponent(p.key)}`, action: 'Add to DriveAtlas', sticky: true });
     });
+    es.addEventListener('scan-progress', (e) => {
+      const view = JSON.parse(e.data);
+      setData((d) => ({ ...d, scanStatus: { ...(d.scanStatus || { queue: [] }), active: view } }));
+    });
+    es.addEventListener('scan-update', (e) => setData((d) => ({ ...d, scanStatus: JSON.parse(e.data) })));
+    es.addEventListener('scan-finished', (e) => {
+      const v = JSON.parse(e.data);
+      setData((d) => ({ ...d, lastScan: v }));
+      if (v.state === 'done') toast({ icon: 'check', title: `Scan finished${v.label ? `: ${v.label}` : ''}`, body: `${fmtNumber(v.files)} files and ${fmtNumber(v.folders)} folders, ${fmtBytes(v.bytes)}.`, href: `#/files/${v.driveId}`, action: 'Browse files' });
+      else if (v.state === 'failed') toast({ icon: 'alert', title: 'Scan stopped', body: v.error || 'The scan could not finish.', sticky: true });
+      else if (v.state === 'cancelled') toast({ icon: 'x', title: 'Scan cancelled', body: 'Nothing from this scan was kept. The previous scan, if any, is still there.' });
+    });
     es.addEventListener('unplugged', (e) => {
       const p = JSON.parse(e.data);
       toast({ icon: 'drives', title: `${p.friendlyName} was unplugged`, body: 'Its record stays in your catalog.' });
@@ -100,13 +116,19 @@ function Main({ state, onSignedOut, onTheme }) {
   if (route.name === 'drives') screen = html`<${Drives} data=${data} />`;
   else if (route.name === 'drive' && route.id) screen = html`<${DrivePage} id=${route.id} data=${data} onChanged=${refresh} />`;
   else if (route.name === 'add') screen = html`<${AddDrive} key=${route.query.get('disk') || 'manual'} data=${data} query=${route.query} onSaved=${refresh} />`;
+  else if (route.name === 'search') screen = html`<${Search} data=${data} query=${route.query} />`;
+  else if (route.name === 'files' && route.id) screen = html`<${Files} driveId=${route.id} data=${data} query=${route.query} />`;
+  else if (route.name === 'scan') screen = html`<${Scan} data=${data} />`;
   else screen = html`<${Home} data=${data} />`;
 
+  const activeScan = data.scanStatus?.active;
   const nav = [
     { id: 'home', label: 'Home', icon: 'home', href: '#/' },
-    { id: 'drives', label: 'Drives', icon: 'drives', href: '#/drives', count: data.drives.length }
+    { id: 'drives', label: 'Drives', icon: 'drives', href: '#/drives', count: data.drives.length },
+    { id: 'search', label: 'Search', icon: 'search', href: '#/search' },
+    { id: 'scan', label: 'Scan', icon: 'scan', href: '#/scan', note: activeScan ? (activeScan.state === 'paused' ? 'Paused' : activeScan.percent != null ? `${activeScan.percent}%` : 'Running') : null }
   ];
-  const active = route.name === 'drive' || route.name === 'add' ? 'drives' : route.name;
+  const active = route.name === 'drive' || route.name === 'add' || route.name === 'files' ? 'drives' : route.name;
   const pending = data.drives.filter((d) => d.hasPendingChanges).length + data.connected.filter((d) => !d.driveId).length;
 
   return html`<div class="shell">
@@ -115,8 +137,9 @@ function Main({ state, onSignedOut, onTheme }) {
       <nav class="nav" aria-label="Main">
         ${nav.map((n) => html`<a class=${`nav-item ${active === n.id ? 'on' : ''}`} href=${n.href} aria-current=${active === n.id ? 'page' : undefined}>
           <${Icon} name=${n.icon} /><span class="grow">${n.label}</span>${n.count ? html`<span class="nav-count">${n.count}</span>` : null}
+          ${n.note ? html`<span class="nav-note">${n.note}</span>` : null}
           ${n.id === 'home' && pending ? html`<span class="count count-warn">${pending}</span>` : null}</a>`)}
-        <span class="nav-soon">Search, Scan and Health arrive in the next updates.</span>
+        <span class="nav-soon">Health, backups and QR labels arrive in the next updates.</span>
       </nav>
       <div class="sidebar-foot">
         <label class="theme-pick" for="theme"><${Icon} name=${state.settings.theme === 'dark' ? 'moon' : 'sun'} size=${16} /><span class="grow">Theme</span>

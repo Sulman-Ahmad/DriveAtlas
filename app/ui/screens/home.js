@@ -1,5 +1,5 @@
 // Home: totals, drives connected right now, and what needs attention.
-import { html } from '../lib.js';
+import { html, go } from '../lib.js';
 import { Icon, TypeTile, Card, CapacityBar, HealthPill, Pill, LinkButton, Empty, healthInfo } from '../components.js';
 import { fmtBytes, percent } from '/shared/format.js';
 
@@ -11,7 +11,9 @@ export function Home({ data }) {
   const pending = drives.filter((d) => d.hasPendingChanges);
   const unhealthy = connected.filter((d) => d.health && !/^healthy$/i.test(d.health));
   const full = drives.filter((d) => d.total && d.used && d.used / d.total > 0.9);
+  const neverScanned = drives.filter((d) => d.connected && !d.last_scanned_at);
   const attention = [
+    ...neverScanned.map((d) => ({ tone: 'accent', icon: 'scan', title: `${d.name} has not been scanned`, body: 'Scan it once to search its files later, even when it is unplugged.', href: `#/drive/${d.id}`, action: 'Open drive' })),
     ...pending.map((d) => ({ tone: 'accent', icon: 'sync', title: `Changes found on ${d.name}`, body: 'Plugged in with differences from its record. Review them before anything is updated.', href: `#/drive/${d.id}`, action: 'Review changes' })),
     ...unknown.map((d) => ({ tone: 'accent', icon: 'plus', title: `${d.friendlyName} is not in your catalog`, body: `${fmtBytes(d.size)} ${d.busType} drive${d.letters.length ? ` on ${d.letters.map((l) => `${l}:`).join(' ')}` : ''}.`, href: `#/add?disk=${encodeURIComponent(d.key)}`, action: 'Add to DriveAtlas' })),
     ...unhealthy.map((d) => ({ tone: 'bad', icon: 'alert', title: `${d.driveName || d.friendlyName}: Windows reports ${d.health}`, body: 'Copy anything important off this drive soon.', href: d.driveId ? `#/drive/${d.driveId}` : null, action: 'Open drive' })),
@@ -22,6 +24,9 @@ export function Home({ data }) {
   return html`<div class="page">
     <header class="page-head">
       <div><h1>Home</h1><p class="muted">${today} · ${c.total} ${c.total === 1 ? 'drive' : 'drives'} in your catalog</p></div>
+      <form class="search" role="search" onSubmit=${(e) => { e.preventDefault(); const q = e.target.elements.q.value.trim(); go(`#/search${q ? `?q=${encodeURIComponent(q)}` : ''}`); }}>
+        <${Icon} name="search" size=${18} /><input name="q" type="search" placeholder="Search files on all drives" aria-label="Search files on all drives" />
+      </form>
       <${LinkButton} kind="primary" icon="plus" href="#/add">Add drive</${LinkButton}>
     </header>
 

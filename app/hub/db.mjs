@@ -187,6 +187,16 @@ const MIGRATIONS = [
     fields TEXT,
     deleted INTEGER NOT NULL DEFAULT 0
   );
+  `,
+  // 2: scanning details
+  `
+  ALTER TABLE scans ADD COLUMN is_current INTEGER NOT NULL DEFAULT 0;
+  ALTER TABLE scans ADD COLUMN partition_label TEXT;
+  ALTER TABLE scans ADD COLUMN bytes_estimate INTEGER;
+  ALTER TABLE scans ADD COLUMN skipped INTEGER NOT NULL DEFAULT 0;
+  CREATE INDEX scans_current ON scans(drive_id, partition_idx, is_current);
+  ALTER TABLE entries ADD COLUMN items INTEGER;
+  CREATE INDEX entries_kind ON entries(scan_id, kind);
   `
 ];
 

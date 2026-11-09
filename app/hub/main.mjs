@@ -4,7 +4,8 @@ import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
-import { PORT, HOST, OPEN_WINDOW, DATA_DIR, VERSION, BACKGROUND, LOG_PATH } from './config.mjs';
+import { PORT, HOST, OPEN_WINDOW, DATA_DIR, VERSION, BACKGROUND, LOG_PATH, DB_PATH } from './config.mjs';
+import { ScanManager } from './scan/manager.mjs';
 
 if (BACKGROUND) {
   const log = fs.createWriteStream(LOG_PATH, { flags: 'a' });
@@ -14,12 +15,25 @@ if (BACKGROUND) {
 }
 import { openDb } from './db.mjs';
 import { DiskWatcher, diskKey } from './disks.mjs';
-import { createHub } from './api.mjs';
+import { createHub, scanDefaults } from './api.mjs';
 import { syncConnected, connectedView } from './catalog.mjs';
 
 const db = openDb();
 const watcher = new DiskWatcher();
-const hub = createHub({ db, watcher });
+const scans = new ScanManager(db, DB_PATH, () => scanDefaults(db));
+const hub = createHub({ db, watcher, scans });
+
+let lastProgress = 0;
+scans.on('progress', (view) => {
+  if (Date.now() - lastProgress < 250) return;
+  lastProgress = Date.now();
+  hub.broadcast('scan-progress', view);
+});
+scans.on('update', () => hub.broadcast('scan-update', scans.status()));
+scans.on('finished', (view) => {
+  hub.broadcast('scan-finished', view);
+  hub.broadcast('catalog', { reason: 'scanned', id: view.driveId });
+});
 const url = `http://localhost:${PORT}/`;
 
 watcher.on('change', ({ disks, added, removed, first }) => {
@@ -84,6 +98,7 @@ server.listen(PORT, HOST, () => {
 });
 
 function shutdown() {
+  scans.stop();
   watcher.stop();
   server.close();
   try { db.close(); } catch { /* already closed */ }

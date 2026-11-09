@@ -45,6 +45,34 @@ export function fmtDate(ms) {
   return new Date(ms).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
 }
 
+// 768 -> "12:48", 6730 -> "1:52:10"
+export function fmtDuration(seconds) {
+  if (seconds == null) return '—';
+  const s = Math.round(seconds);
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const sec = String(s % 60).padStart(2, '0');
+  return h ? `${h}:${String(m).padStart(2, '0')}:${sec}` : `${m}:${sec}`;
+}
+
+// Dates taken from photos and videos are camera clock times, stored as UTC.
+export function fmtCameraDate(ms) {
+  if (!ms) return '—';
+  return new Date(ms).toLocaleString('en-GB', { timeZone: 'UTC', day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+}
+
+export function fmtDateTime(ms) {
+  if (!ms) return '—';
+  return new Date(ms).toLocaleString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+}
+
+export function fmtSeconds(s) {
+  if (s == null) return '';
+  if (s < 60) return `about ${Math.max(1, Math.round(s))} s`;
+  if (s < 3600) return `about ${Math.round(s / 60)} min`;
+  return `about ${(s / 3600).toFixed(1)} h`;
+}
+
 export function timeAgo(ms, now = Date.now()) {
   if (!ms) return 'never';
   const s = Math.round((now - ms) / 1000);
