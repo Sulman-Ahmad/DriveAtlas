@@ -1,0 +1,35 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+build/
+*.apk
+*.aab
+
+# Your catalog and backups never go into git
+data/
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+*.sqlite
+*.dabackup
+
+# Android
+android/.gradle/
+android/app/build/
+android/local.properties
+*.keystore
+*.jks
+
+# Temporary files from the mockup renderer
+design/ui-mockups/_measure.html
+
+# OS and editors
+Thumbs.db
+desktop.ini
+.DS_Store
+.vscode/
+.idea/
+*.log
