@@ -10,12 +10,14 @@ export function Home({ data }) {
   const unknown = connected.filter((d) => !d.driveId);
   const pending = drives.filter((d) => d.hasPendingChanges);
   const unhealthy = connected.filter((d) => d.health && !/^healthy$/i.test(d.health));
+  const badHealth = drives.filter((d) => d.health_state === 'bad' || d.health_state === 'watch');
   const full = drives.filter((d) => d.total && d.used && d.used / d.total > 0.9);
   const neverScanned = drives.filter((d) => d.connected && !d.last_scanned_at);
   const attention = [
     ...neverScanned.map((d) => ({ tone: 'accent', icon: 'scan', title: `${d.name} has not been scanned`, body: 'Scan it once to search its files later, even when it is unplugged.', href: `#/drive/${d.id}`, action: 'Open drive' })),
     ...pending.map((d) => ({ tone: 'accent', icon: 'sync', title: `Changes found on ${d.name}`, body: 'Plugged in with differences from its record. Review them before anything is updated.', href: `#/drive/${d.id}`, action: 'Review changes' })),
     ...unknown.map((d) => ({ tone: 'accent', icon: 'plus', title: `${d.friendlyName} is not in your catalog`, body: `${fmtBytes(d.size)} ${d.busType} drive${d.letters.length ? ` on ${d.letters.map((l) => `${l}:`).join(' ')}` : ''}.`, href: `#/add?disk=${encodeURIComponent(d.key)}`, action: 'Add to DriveAtlas' })),
+    ...badHealth.map((d) => ({ tone: d.health_state === 'bad' ? 'bad' : 'warn', icon: 'pulse', title: `${d.name} health is ${d.health_state === 'bad' ? 'Bad' : 'Watch'}${d.health_pct != null ? ` (${Math.round(d.health_pct)}%)` : ''}`, body: d.health_state === 'bad' ? 'Copy anything important off this drive soon.' : 'Keep an eye on it and make sure it is backed up.', href: `#/drive/${d.id}`, action: 'Open drive' })),
     ...unhealthy.map((d) => ({ tone: 'bad', icon: 'alert', title: `${d.driveName || d.friendlyName}: Windows reports ${d.health}`, body: 'Copy anything important off this drive soon.', href: d.driveId ? `#/drive/${d.driveId}` : null, action: 'Open drive' })),
     ...full.map((d) => ({ tone: 'warn', icon: 'drives', title: `${d.name} is ${percent(d.used, d.total)}% full`, body: `${fmtBytes(d.total - d.used)} free of ${fmtBytes(d.total)}.`, href: `#/drive/${d.id}`, action: 'Open drive' }))
   ];
@@ -46,7 +48,7 @@ export function Home({ data }) {
         <${Card} id="h-connected" title="Connected now" pad=${false} extra=${html`<span class="muted small">${connected.length} ${connected.length === 1 ? 'drive' : 'drives'}</span><a class="link push" href="#/drives">View all drives</a>`}>
           ${!data.ready ? html`<p class="card-body muted">Reading your drives…</p>` : null}
           ${data.ready && !connected.length ? html`<div class="card-body"><${Empty} title="No drives detected">Plug in a drive and it appears here within a few seconds.</${Empty}></div>` : null}
-          ${connected.map((d) => html`<${ConnectedRow} d=${d} key=${d.key} />`)}
+          ${connected.map((d) => html`<${ConnectedRow} d=${d} drive=${drives.find((x) => x.id === d.driveId)} key=${d.key} />`)}
         </${Card}>
       </div>
       <div class="col-side">
@@ -63,8 +65,8 @@ export function Home({ data }) {
   </div>`;
 }
 
-function ConnectedRow({ d }) {
-  const h = healthInfo(d.health, d.driveType);
+function ConnectedRow({ d, drive }) {
+  const h = healthInfo(d.health, d.driveType, drive?.health_state, drive?.health_pct);
   const href = d.driveId ? `#/drive/${d.driveId}` : `#/add?disk=${encodeURIComponent(d.key)}`;
   return html`<a class="row row-link" href=${href}>
     <${TypeTile} type=${d.driveType} size=${36} />

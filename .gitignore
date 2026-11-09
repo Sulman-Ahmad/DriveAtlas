@@ -15,6 +15,20 @@ data/
 *.db-shm
 *.sqlite
 *.dabackup
+*.dabackup.part
+*.db.restore
+*.db.before-restore
+
+# Secrets and environment files (DriveAtlas has none, but keep them out if they ever appear)
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+secrets/
+keystore.properties
 
 # Android
 android/.gradle/

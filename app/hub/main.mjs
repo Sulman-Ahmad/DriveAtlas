@@ -1,10 +1,18 @@
 // DriveAtlas hub: starts the catalog database, the disk watcher and the web server.
-//   node --disable-warning=ExperimentalWarning hub/main.mjs [--open]
+//   node --disable-warning=ExperimentalWarning hub/main.mjs [--open] [--background]
 import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
-import { PORT, HOST, OPEN_WINDOW, DATA_DIR, VERSION, BACKGROUND, LOG_PATH, DB_PATH } from './config.mjs';
+import {
+  PORT, HOST, OPEN_WINDOW, DATA_DIR, DB_PATH, VERSION, BACKGROUND, LOG_PATH, WINDOW_PROFILE, RESTARTED, TEST_MODE, APP_DIR
+} from './config.mjs';
+import { applyStagedRestore, startBackupScheduler } from './backup.mjs';
+import { openDb } from './db.mjs';
+import { deleteExpiredSessions } from './auth.mjs';
+import { DiskWatcher, diskKey } from './disks.mjs';
+import { createHub, scanDefaults } from './api.mjs';
+import { syncConnected, connectedView } from './catalog.mjs';
 import { ScanManager } from './scan/manager.mjs';
 
 if (BACKGROUND) {
@@ -13,15 +21,27 @@ if (BACKGROUND) {
   console.log = write('INFO');
   console.error = write('ERROR');
 }
-import { openDb } from './db.mjs';
-import { DiskWatcher, diskKey } from './disks.mjs';
-import { createHub, scanDefaults } from './api.mjs';
-import { syncConnected, connectedView } from './catalog.mjs';
+process.on('uncaughtException', (err) => { console.error('[fatal]', err); process.exit(1); });
+process.on('unhandledRejection', (err) => { console.error('[unhandled]', err); });
 
+// A restore chosen in the app is swapped in here, before the catalog opens.
+const restored = applyStagedRestore();
 const db = openDb();
+// A restored catalog starts with nobody signed in (older backups may still hold sign-ins).
+if (restored) db.exec('DELETE FROM sessions');
+deleteExpiredSessions(db);
+setInterval(() => deleteExpiredSessions(db), 6 * 3600 * 1000).unref();
+// Leftovers from an interrupted backup, download or health reading.
+for (const name of fs.readdirSync(DATA_DIR)) {
+  if (/^\.(snapshot|health|upload)-/.test(name) || name.endsWith('.restore-check')) fs.rm(path.join(DATA_DIR, name), { force: true }, () => {});
+}
+fs.rm(path.join(DATA_DIR, 'exports'), { recursive: true, force: true }, () => {});
+
 const watcher = new DiskWatcher();
 const scans = new ScanManager(db, DB_PATH, () => scanDefaults(db));
-const hub = createHub({ db, watcher, scans });
+const url = `http://localhost:${PORT}/`;
+let server;
+const hub = createHub({ db, watcher, scans, restart });
 
 let lastProgress = 0;
 scans.on('progress', (view) => {
@@ -34,7 +54,6 @@ scans.on('finished', (view) => {
   hub.broadcast('scan-finished', view);
   hub.broadcast('catalog', { reason: 'scanned', id: view.driveId });
 });
-const url = `http://localhost:${PORT}/`;
 
 watcher.on('change', ({ disks, added, removed, first }) => {
   const result = syncConnected(db, disks);
@@ -57,8 +76,14 @@ watcher.on('change', ({ disks, added, removed, first }) => {
 });
 watcher.on('error', (err) => console.error('[disks]', err.message));
 
+startBackupScheduler(db, (r) => {
+  if (r.ok) console.log(`[backup] daily backup written (${Math.round(r.size / 1e6)} MB)`);
+  else console.error('[backup] daily backup failed:', r.error);
+  hub.broadcast('backup', r.ok ? { ok: true, size: r.size } : { ok: false, error: r.error });
+});
+
 function findBrowser() {
-  const pf = process.env['ProgramFiles'] || 'C:\\Program Files';
+  const pf = process.env.ProgramFiles || 'C:\\Program Files';
   const pf86 = process.env['ProgramFiles(x86)'] || 'C:\\Program Files (x86)';
   const local = process.env.LOCALAPPDATA || '';
   return [
@@ -73,16 +98,39 @@ function findBrowser() {
 export function openWindow() {
   const browser = findBrowser();
   if (!browser) { console.log(`Open ${url} in your browser.`); return; }
-  const profile = path.join(path.dirname(DATA_DIR), 'window');
-  spawn(browser, [`--app=${url}`, `--user-data-dir=${profile}`, '--window-size=1320,880', '--no-first-run', '--no-default-browser-check'], {
+  spawn(browser, [`--app=${url}`, `--user-data-dir=${WINDOW_PROFILE}`, '--window-size=1320,880', '--no-first-run', '--no-default-browser-check'], {
     detached: true, stdio: 'ignore', windowsHide: false
   }).unref();
 }
 
-const server = http.createServer((req, res) => hub.handle(req, res));
+// Restarts the hub (after a restore or a catalog move). Open windows reconnect on their own.
+function restart() {
+  console.log('[hub] restarting');
+  scans.stop();
+  watcher.stop();
+  server.close();
+  server.closeAllConnections();
+  setTimeout(() => {
+    try { db.close(); } catch { /* already closed */ }
+    const args = process.argv.slice(1).filter((a) => a !== '--open' && a !== '--restarted');
+    if (!args.includes('--background')) args.push('--background');
+    args.push('--restarted');
+    spawn(process.execPath, [...process.execArgv, ...args], { detached: true, stdio: 'ignore', env: process.env, cwd: APP_DIR, windowsHide: true }).unref();
+    process.exit(0);
+  }, 400);
+}
+
+server = http.createServer((req, res) => hub.handle(req, res));
+server.headersTimeout = 20_000;
+server.requestTimeout = 30 * 60_000; // long enough to upload a large backup file
+server.keepAliveTimeout = 5_000;
+server.maxHeadersCount = 64;
+
+let listenTries = 0;
 server.on('error', (err) => {
   if (err.code === 'EADDRINUSE') {
-    // Already running: just bring up a window.
+    // After a restart the old hub may need a moment to let go of the port.
+    if (RESTARTED && listenTries < 20) { listenTries += 1; setTimeout(() => server.listen(PORT, HOST), 300); return; }
     console.log(`DriveAtlas is already running at ${url}`);
     if (OPEN_WINDOW) openWindow();
     setTimeout(() => process.exit(0), 300);
@@ -93,6 +141,8 @@ server.on('error', (err) => {
 server.listen(PORT, HOST, () => {
   console.log(`DriveAtlas ${VERSION} running at ${url}`);
   console.log(`Catalog: ${DATA_DIR}`);
+  if (restored) console.log('[hub] a backup was restored; the previous catalog was kept as driveatlas.db.before-restore');
+  if (TEST_MODE) console.log('[hub] TEST MODE: sample-folder scans allowed. Never use test mode with your real catalog.');
   watcher.start();
   if (OPEN_WINDOW) openWindow();
 });

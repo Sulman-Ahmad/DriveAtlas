@@ -69,7 +69,7 @@ export function DriveCard({ d }) {
     <div><${CapacityBar} used=${d.used} total=${d.total} /><div class="mt6"><${UsageLine} used=${d.used} total=${d.total} /></div></div>
     <div class="pills">
       <${StatusPill} drive=${d} />
-      <${HealthPill} health=${d.health_status} type=${d.type} />
+      <${HealthPill} health=${d.health_status} type=${d.type} state=${d.health_state} pct=${d.health_pct} />
       <${BootPill} kind=${d.bootable_override || (d.bootable_kind === 'windows-installed' || d.bootable_kind === 'uefi' ? null : d.bootable_kind)} />
     </div>
   </a>`;

@@ -109,6 +109,8 @@ export function openInExplorer(db, id, disks) {
   const part = disk.partitions.find((p) => p.number === e.partition_idx) || disk.partitions.find((p) => p.letter);
   if (!part || !part.letter) throw httpError(409, 'This drive has no drive letter right now, so Explorer cannot open it.');
   const full = `${part.letter}:${e.path === '\\' ? '\\' : e.path}`;
+  // Names come from the scanned drive. Refuse anything that could break out of the quoted argument.
+  if (!/^[A-Za-z]$/.test(part.letter) || /["\u0000-\u001F]/.test(full)) throw httpError(400, 'This file name cannot be opened safely in Explorer.');
   const arg = e.is_dir ? `"${full}"` : `/select,"${full}"`;
   spawn('explorer.exe', [arg], { windowsVerbatimArguments: true, detached: true, stdio: 'ignore' }).unref();
   return { opened: full };

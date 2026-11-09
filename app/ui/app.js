@@ -9,6 +9,7 @@ import { DrivePage } from './screens/drive.js';
 import { Search } from './screens/search.js';
 import { Files } from './screens/files.js';
 import { Scan } from './screens/scan.js';
+import { Settings } from './screens/settings.js';
 import { fmtNumber, fmtBytes } from '/shared/format.js';
 
 function parseRoute(hash) {
@@ -119,6 +120,7 @@ function Main({ state, onSignedOut, onTheme }) {
   else if (route.name === 'search') screen = html`<${Search} data=${data} query=${route.query} />`;
   else if (route.name === 'files' && route.id) screen = html`<${Files} driveId=${route.id} data=${data} query=${route.query} />`;
   else if (route.name === 'scan') screen = html`<${Scan} data=${data} />`;
+  else if (route.name === 'settings') screen = html`<${Settings} onTheme=${setTheme} onSignedOut=${onSignedOut} />`;
   else screen = html`<${Home} data=${data} />`;
 
   const activeScan = data.scanStatus?.active;
@@ -139,7 +141,7 @@ function Main({ state, onSignedOut, onTheme }) {
           <${Icon} name=${n.icon} /><span class="grow">${n.label}</span>${n.count ? html`<span class="nav-count">${n.count}</span>` : null}
           ${n.note ? html`<span class="nav-note">${n.note}</span>` : null}
           ${n.id === 'home' && pending ? html`<span class="count count-warn">${pending}</span>` : null}</a>`)}
-        <span class="nav-soon">Health, backups and QR labels arrive in the next updates.</span>
+        <a class=${`nav-item ${active === 'settings' ? 'on' : ''}`} href="#/settings" aria-current=${active === 'settings' ? 'page' : undefined}><${Icon} name="settings" /><span class="grow">Settings</span></a>
       </nav>
       <div class="sidebar-foot">
         <label class="theme-pick" for="theme"><${Icon} name=${state.settings.theme === 'dark' ? 'moon' : 'sun'} size=${16} /><span class="grow">Theme</span>

@@ -1,6 +1,6 @@
 // Drive page: details, partitions, changes to review, edit and delete.
 import { html, useState, useEffect, api, go } from '../lib.js';
-import { Icon, Card, TypeTile, StatusPill, HealthPill, BootPill, CapacityBar, UsageLine, Button, Pill, ErrorNote } from '../components.js';
+import { Icon, Card, TypeTile, StatusPill, HealthPill, BootPill, CapacityBar, UsageLine, Button, Pill, ErrorNote, NO_HEALTH_TYPES } from '../components.js';
 import { DriveForm } from './drive-form.js';
 import { typeById, BOOT_KINDS, statusName } from '/shared/drive-types.js';
 import { fmtBytes, fmtAdvertised, fmtDate, fmtNumber, timeAgo } from '/shared/format.js';
@@ -11,8 +11,8 @@ export function DrivePage({ id, data, onChanged }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
 
-  const load = () => Promise.all([api('GET', `/api/drives/${id}`), api('GET', `/api/drives/${id}/scans`)])
-    .then(([r, s]) => setState({ drive: r.drive, disk: r.disk, scans: s.current })).catch((err) => setState({ error: err.message }));
+  const load = () => Promise.all([api('GET', `/api/drives/${id}`), api('GET', `/api/drives/${id}/scans`), api('GET', `/api/drives/${id}/health`)])
+    .then(([r, s, h]) => setState({ drive: r.drive, disk: r.disk, scans: s.current, health: h.history })).catch((err) => setState({ error: err.message }));
   useEffect(() => { setMode('view'); load(); }, [id, data.version]);
 
   if (state.loading) return html`<div class="page"><p class="muted">Loading…</p></div>`;
@@ -56,7 +56,7 @@ export function DrivePage({ id, data, onChanged }) {
       <div class="grow stack-sm">
         <h1>${d.name}</h1>
         <div class="muted">${brandModel || kind} · ${kind}${d.advertised_bytes ? ` · ${fmtAdvertised(d.advertised_bytes)}` : ''}${d.actual_bytes ? ` (${fmtBytes(d.actual_bytes)} usable)` : ''}</div>
-        <div class="pills"><${StatusPill} drive=${d} /><${HealthPill} health=${d.health_status} type=${d.type} /><${BootPill} kind=${boot} />
+        <div class="pills"><${StatusPill} drive=${d} /><${HealthPill} health=${d.health_status} type=${d.type} state=${d.health_state} pct=${d.health_pct} /><${BootPill} kind=${boot} />
           ${d.label_code ? html`<${Pill} tone="plain" icon="qr">${d.label_code}</${Pill}>` : null}</div>
       </div>
       ${mode === 'view' ? html`<div class="actions">
@@ -93,6 +93,7 @@ export function DrivePage({ id, data, onChanged }) {
             </a>`)}</div>`
           : html`<p class="small muted mt0">${d.connected ? 'Not scanned yet. Scan it to record its folders and files; nothing is copied.' : 'Not scanned yet. Plug it in to scan it.'}</p>`}
         </${Card}>
+        <${HealthSection} d=${d} history=${state.health} onRead=${async () => { await onChanged(); await load(); }} />
         <${Card} id="h-parts" title="Partitions" extra=${html`<span class="muted small">${d.partition_style || ''}${d.partitions.length ? ` · ${d.partitions.length}` : ''}</span>`}>
           ${d.partitions.length ? html`<div class="table-wrap"><table class="table">
             <thead><tr><th>#</th><th>Name</th><th>File system</th><th>Size</th><th>Used</th><th>Notes</th></tr></thead>
@@ -168,6 +169,58 @@ function ChangesPanel({ drive, connected, onDone }) {
       </div>
     </div>
   </section>`;
+}
+
+function HealthSection({ d, history, onRead }) {
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState('');
+  const last = history[0];
+  const flash = NO_HEALTH_TYPES.includes(d.type);
+
+  async function read() {
+    setBusy(true);
+    setMsg('Windows will ask for permission. Choose Yes to read drive health.');
+    try { await api('POST', '/api/health/read'); setMsg(''); await onRead(); } catch (e) { setMsg(e.message); } finally { setBusy(false); }
+  }
+
+  const stat = (label, value) => (value == null ? null : html`<div class="mini-stat"><span>${label}</span><strong>${value}</strong></div>`);
+  return html`<${Card} id="h-health" title="Health" extra=${last ? html`<span class="muted small push">Read ${timeAgo(last.taken_at)} · ${last.source === 'smartctl' ? 'smartctl' : 'Windows'}</span>` : null}>
+    ${last ? html`<div class="stack">
+      <div class="health-head">
+        <span class=${`health-big health-${last.status || 'none'}`}>${last.health_pct != null ? `${Math.round(last.health_pct)}%` : '—'}</span>
+        <${HealthPill} health=${d.health_status} type=${d.type} state=${last.status} />
+        ${history.length > 1 ? html`<${Sparkline} points=${history.slice().reverse().map((h) => h.health_pct).filter((v) => v != null)} />` : null}
+      </div>
+      <div class="stat-grid">
+        ${stat('Temperature', last.temp_c != null ? `${Math.round(last.temp_c)} °C` : null)}
+        ${stat('Power-on hours', last.power_on_hours != null ? `${fmtNumber(last.power_on_hours)} h` : null)}
+        ${stat('Power cycles', last.power_cycles != null ? fmtNumber(last.power_cycles) : null)}
+        ${stat('Written', last.tb_written != null ? `${last.tb_written} TB` : null)}
+        ${stat('Reallocated sectors', last.reallocated)}
+        ${stat('Pending sectors', last.pending)}
+        ${stat('Media errors', last.media_errors)}
+      </div>
+    </div>` : html`<p class="small muted mt0">${flash
+      ? 'USB sticks and memory cards do not report health. DriveAtlas shows their age and last scan instead.'
+      : d.connected ? 'Not read yet. Reading health needs Windows permission: a prompt appears and you choose Yes. Nothing on the drive is changed.' : 'Not read yet. Plug the drive in to read its health.'}</p>`}
+    ${msg ? html`<p class="small muted" role="status">${msg}</p>` : null}
+    ${d.connected && !flash ? html`<div class="mt6"><${Button} icon="pulse" disabled=${busy} onClick=${read}>${busy ? 'Reading…' : 'Read health now'}</${Button}></div>` : null}
+  </${Card}>`;
+}
+
+// Small trend line of health readings, oldest to newest.
+function Sparkline({ points }) {
+  if (points.length < 2) return null;
+  const w = 160;
+  const h = 40;
+  const min = Math.min(...points, 50);
+  const max = Math.max(...points, 100);
+  const xy = points.map((p, i) => [Math.round((i / (points.length - 1)) * (w - 8)) + 4, Math.round(h - 4 - ((p - min) / (max - min || 1)) * (h - 8))]);
+  const last = xy.at(-1);
+  return html`<svg class="spark" viewBox=${`0 0 ${w} ${h}`} width=${w} height=${h} role="img" aria-label=${`Health trend from ${Math.round(points[0])}% to ${Math.round(points.at(-1))}%`}>
+    <polyline fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" points=${xy.map((p) => p.join(',')).join(' ')}></polyline>
+    <circle cx=${last[0]} cy=${last[1]} r="3.5" fill="currentColor"></circle>
+  </svg>`;
 }
 
 // "Samsung" + "SAMSUNG MZVLB512" shows once, not twice.

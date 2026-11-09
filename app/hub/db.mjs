@@ -197,8 +197,26 @@ const MIGRATIONS = [
   CREATE INDEX scans_current ON scans(drive_id, partition_idx, is_current);
   ALTER TABLE entries ADD COLUMN items INTEGER;
   CREATE INDEX entries_kind ON entries(scan_id, kind);
+  `,
+  // 3: stronger password hashing parameters, drive health summary, backup log
+  `
+  ALTER TABLE owner ADD COLUMN pw_params TEXT NOT NULL DEFAULT 'scrypt:16384:8:1';
+  ALTER TABLE drives ADD COLUMN health_pct REAL;
+  ALTER TABLE drives ADD COLUMN health_state TEXT;
+  ALTER TABLE drives ADD COLUMN health_checked_at INTEGER;
+  CREATE TABLE backups (
+    id TEXT PRIMARY KEY,
+    created_at INTEGER NOT NULL,
+    kind TEXT NOT NULL,
+    path TEXT,
+    size INTEGER,
+    status TEXT NOT NULL,
+    error TEXT
+  );
   `
 ];
+
+export const SCHEMA_VERSION = MIGRATIONS.length;
 
 export function openDb(file = DB_PATH) {
   const db = new DatabaseSync(file);

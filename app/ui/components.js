@@ -11,10 +11,15 @@ export function TypeTile({ type, size = 40, accent = false }) {
   return html`<span class=${`tile ${accent ? 'tile-accent' : ''}`} style=${`width:${size}px;height:${size}px`}><${Icon} name=${t.icon} size=${Math.round(size * 0.55)} /></span>`;
 }
 
-// Windows reports Healthy / Warning / Unhealthy until full SMART data arrives.
-export function healthInfo(health, type) {
-  const noHealth = ['usb', 'sd', 'microsd', 'cf', 'other'].includes(type);
-  if (noHealth) return { tone: 'muted', text: 'No health data' };
+export const NO_HEALTH_TYPES = ['usb', 'sd', 'microsd', 'cf', 'other'];
+
+// Uses a full health reading (state + %) when there is one, else Windows' Healthy / Warning / Unhealthy.
+export function healthInfo(health, type, state, pct) {
+  if (state) {
+    const name = { good: 'Good', watch: 'Watch', bad: 'Bad' }[state] || state;
+    return { tone: { good: 'good', watch: 'warn', bad: 'bad' }[state] || 'muted', text: pct != null ? `${name} · ${Math.round(pct)}%` : name };
+  }
+  if (NO_HEALTH_TYPES.includes(type)) return { tone: 'muted', text: 'No health data' };
   if (!health) return { tone: 'muted', text: 'Not checked yet' };
   if (/healthy/i.test(health) && !/un/i.test(health)) return { tone: 'good', text: 'Good' };
   if (/warning/i.test(health)) return { tone: 'warn', text: 'Watch' };
@@ -26,8 +31,8 @@ export function Pill({ tone = 'muted', icon, children, dot }) {
   return html`<span class=${`pill pill-${tone}`}>${dot ? html`<span class="dot"></span>` : null}${icon ? html`<${Icon} name=${icon} size=${13} />` : null}${children}</span>`;
 }
 
-export function HealthPill({ health, type }) {
-  const h = healthInfo(health, type);
+export function HealthPill({ health, type, state, pct }) {
+  const h = healthInfo(health, type, state, pct);
   return html`<${Pill} tone=${h.tone}>${h.text}</${Pill}>`;
 }
 
