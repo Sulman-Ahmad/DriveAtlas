@@ -1,4 +1,5 @@
 // File maps: browse a drive's folders, search every drive, show one file's details.
+import fs from 'node:fs';
 import { spawn } from 'node:child_process';
 import { httpError } from './auth.mjs';
 import { matchDisk, listDrives } from './catalog.mjs';
@@ -106,12 +107,21 @@ export function openInExplorer(db, id, disks) {
   const drive = listDrives(db).find((d) => d.id === e.drive_id);
   const disk = drive && disks.find((d) => matchDisk([drive], d));
   if (!disk) throw httpError(409, 'Plug this drive in to open the file.');
-  const part = disk.partitions.find((p) => p.number === e.partition_idx) || disk.partitions.find((p) => p.letter);
-  if (!part || !part.letter) throw httpError(409, 'This drive has no drive letter right now, so Explorer cannot open it.');
+  // Only the partition that was scanned: never guess another one.
+  const part = disk.partitions.find((p) => p.number === e.partition_idx);
+  if (!part || !part.letter) throw httpError(409, 'This partition has no drive letter right now, so Explorer cannot open it.');
   const full = `${part.letter}:${e.path === '\\' ? '\\' : e.path}`;
-  // Names come from the scanned drive. Refuse anything that could break out of the quoted argument.
-  if (!/^[A-Za-z]$/.test(part.letter) || /["\u0000-\u001F]/.test(full)) throw httpError(400, 'This file name cannot be opened safely in Explorer.');
-  const arg = e.is_dir ? `"${full}"` : `/select,"${full}"`;
+  // Names come from the scanned drive. Refuse anything that could break out of the quoted argument, and names
+  // ending in a dot or space (Windows reads those differently, so Explorer could reach a different item).
+  if (!/^[A-Za-z]$/.test(part.letter) || /["\u0000-\u001F]/.test(full) || full.split('\\').slice(1).some((seg) => /[. ]$/.test(seg))) {
+    throw httpError(400, 'This name cannot be opened safely in Explorer.');
+  }
+  let st;
+  try { st = fs.lstatSync(full); } catch { throw httpError(404, 'That item is not on the drive any more. Scan the drive again to update it.'); }
+  // A folder opens directly only if it is still a real folder right now. Everything else is shown selected in its
+  // folder (/select), which never runs it.
+  const openFolder = Boolean(e.is_dir) && st.isDirectory() && !st.isSymbolicLink();
+  const arg = openFolder ? `"${full}"` : `/select,"${full}"`;
   spawn('explorer.exe', [arg], { windowsVerbatimArguments: true, detached: true, stdio: 'ignore' }).unref();
   return { opened: full };
 }

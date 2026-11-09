@@ -12,11 +12,12 @@ const PS_ARGS = ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', 
 const ps = (name) => path.join(APP_DIR, 'hub', 'ps', name);
 const clamp = (n) => Math.max(0, Math.min(100, Math.round(n)));
 
+// smartctl runs with administrator rights, so it is only accepted from Program Files (only administrators can
+// write there; winget installs it there). PATH and other folders are never searched.
 export function findSmartctl() {
-  const pf = process.env.ProgramFiles || 'C:\\Program Files';
-  const candidates = [path.join(APP_DIR, 'tools', 'smartctl.exe'), path.join(pf, 'smartmontools', 'bin', 'smartctl.exe')];
-  for (const dir of String(process.env.Path || process.env.PATH || '').split(';')) if (dir.trim()) candidates.push(path.join(dir.trim(), 'smartctl.exe'));
-  return candidates.find((p) => { try { return fs.statSync(p).isFile(); } catch { return false; } }) || null;
+  const roots = [...new Set([process.env.ProgramW6432, process.env.ProgramFiles, 'C:\\Program Files'].filter(Boolean))];
+  const candidates = roots.map((pf) => path.join(pf, 'smartmontools', 'bin', 'smartctl.exe'));
+  return candidates.find((p) => { try { const s = fs.lstatSync(p); return s.isFile() && !s.isSymbolicLink(); } catch { return false; } }) || null;
 }
 
 // Opens a visible window that installs smartmontools with winget. You see and answer its prompts.

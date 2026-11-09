@@ -118,7 +118,7 @@ DriveAtlas keeps one catalog of every storage device you own. Plug a drive in on
 
 <img src="docs/images/architecture.png" alt="The laptop hub holds the catalog; the phone syncs a full copy on your Wi-Fi">
 
-- **Hub on your PC.** A small Node.js process holds the catalog in a SQLite file, reads drive details through PowerShell and `smartctl`, and serves the app on your home network.
+- **Hub on your PC.** A small Node.js process holds the catalog in a SQLite file, reads drive details through PowerShell and `smartctl`, and serves the app to this PC only (from Phase 2, also to your paired phone on your home network).
 - **App window on Windows.** The interface opens in its own Edge or Chrome app window, pinned to the Start menu. No browser tabs, no installer bloat.
 - **Android app.** The same interface packaged as an APK. It keeps a full offline copy and syncs with the hub when both are on the same Wi-Fi. Pairing is one QR scan.
 - **Backups.** One encrypted backup file holds everything. Restore it on a new laptop and DriveAtlas comes back exactly as it was.
@@ -128,7 +128,7 @@ DriveAtlas keeps one catalog of every storage device you own. Plug a drive in on
 | Phase | What ships | Status |
 | --- | --- | --- |
 | 0 · Design | Design sheet, UI mockups for Windows and Android | Done |
-| 1 · PC app | Hub, drive catalog, plug-in and change detection, scanning, file browser, search, partitions, health, backup and restore | In progress |
+| 1 · PC app | Hub, drive catalog, plug-in and change detection, scanning, file browser, search, partitions, health, backup and restore | Done |
 | 2 · Android, helpers and sync | APK built by GitHub Actions, QR pairing, same Wi-Fi sync, offline copy, OTG scanning, helper PCs | Planned |
 | 3 · Organize and insights | Locations and lent-out, QR labels, reminders, duplicates, scan history, charts, exports | Planned |
 
@@ -147,7 +147,7 @@ Full details: [design sheet](docs/DriveAtlas-Design-Sheet.md) ([PDF](docs/DriveA
 
 ## Getting started
 
-The PC app works today for the catalog and your files: account, drive catalog, plug-in and change detection, background scanning (with photo and video details and quick fingerprints), a file browser that works offline, and search across every drive. Drive health and backups are being added next.
+The PC app is complete: account, drive catalog, plug-in and change detection, background scanning (with photo and video details and quick fingerprints), a file browser that works offline, search across every drive, drive health, encrypted backups and restore. The Android app comes next.
 
 **You will need:** Windows 10 or 11, [Node.js](https://nodejs.org) 22 or newer, and Microsoft Edge or Google Chrome. Nothing else to install.
 
@@ -155,7 +155,8 @@ The PC app works today for the catalog and your files: account, drive catalog, p
 2. Double-click **`DriveAtlas.vbs`**. DriveAtlas opens in its own window.
 3. Create your account, then add the drives listed under **Connected now**. Their details are filled in for you.
 4. Open a drive and choose **Scan now**. Afterwards, search its files from **Search**, even when the drive is unplugged.
-5. Optional: add DriveAtlas to the Start menu (no admin needed):
+5. In **Settings**, choose a backup folder (ideally on another drive or a cloud folder) and turn on daily backups. **Read health now** shows wear and temperature after you approve the Windows prompt; install the free smartmontools from the same card for full details.
+6. Optional: add DriveAtlas to the Start menu (no admin needed):
 
    ```bash
    powershell -ExecutionPolicy Bypass -File app/scripts/install.ps1
@@ -186,6 +187,7 @@ DriveAtlas/
 │   └── DriveAtlas-UI-Mockups.{html,pdf}
 ├── tools/                     Scripts that rebuild the docs and mockup images
 ├── LICENSE.md
+├── SECURITY.md                How DriveAtlas is protected, and how to report a problem
 └── README.md
 ```
 
@@ -199,6 +201,10 @@ node tools/render-mockups.mjs
 ## Privacy
 
 DriveAtlas never uploads anything anywhere. It reads file names, folder structure, sizes and dates, plus the first few kilobytes of photos and videos for their details and fingerprints. It never copies, moves or changes your files. Sync happens only between your own devices on your own Wi-Fi, encrypted with a key shared by QR code.
+
+## Security
+
+The hub only listens on this PC and every catalog route needs your password-protected session. Backups are encrypted with your password, inputs are checked on the server, and requests from other websites are refused. See [SECURITY.md](SECURITY.md) for the details and how to report a problem.
 
 ## License
 
