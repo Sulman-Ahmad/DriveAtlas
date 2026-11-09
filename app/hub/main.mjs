@@ -41,7 +41,7 @@ const watcher = new DiskWatcher();
 const scans = new ScanManager(db, DB_PATH, () => scanDefaults(db));
 const url = `http://localhost:${PORT}/`;
 let server;
-const hub = createHub({ db, watcher, scans, restart });
+const hub = createHub({ db, watcher, scans, restart, stop: () => setTimeout(shutdown, 400) });
 
 let lastProgress = 0;
 scans.on('progress', (view) => {
@@ -147,10 +147,13 @@ server.listen(PORT, HOST, () => {
   if (OPEN_WINDOW) openWindow();
 });
 
+// Stops the hub for good (Ctrl+C, Windows shutting down, or Stop DriveAtlas in Settings).
 function shutdown() {
+  console.log('[hub] stopping');
   scans.stop();
   watcher.stop();
   server.close();
+  server.closeAllConnections();
   try { db.close(); } catch { /* already closed */ }
   process.exit(0);
 }

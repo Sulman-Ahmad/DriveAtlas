@@ -73,6 +73,8 @@ export async function createBackup(db, folder, kind = 'manual') {
   }
 }
 
+export const backupRunning = () => busy;
+
 // Keeps only the newest `keep` automatic backups in the folder. Touches only files DriveAtlas named.
 export function pruneBackups(folder, keep) {
   let names = [];

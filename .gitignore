@@ -1,13 +1,36 @@
-# Dependencies
+# Only what DriveAtlas needs to run is published. Everything else (design sheets, mockups,
+# notes, tests, tools, any other .md file) stays in this folder and never goes to GitHub.
+# To publish a new file or folder, add it to the allow-list below on purpose.
+
+# 1. Ignore everything at the top level, then allow the app itself.
+/*
+!/.gitignore
+!/.gitattributes
+!/README.md
+!/LICENSE.md
+!/DriveAtlas.vbs
+!/DriveAtlas.cmd
+!/app/
+
+# 2. Inside app/, allow only what runs.
+/app/*
+!/app/package.json
+!/app/hub/
+!/app/ui/
+!/app/shared/
+!/app/assets/
+!/app/scripts/
+/app/scripts/*
+!/app/scripts/install.ps1
+
+# 3. Never publish these, even inside the folders above.
+*.md
+!/README.md
+!/LICENSE.md
 node_modules/
+package-lock.json
 
-# Build output
-dist/
-build/
-*.apk
-*.aab
-
-# Your catalog and backups never go into git
+# Your catalog and backups
 data/
 *.db
 *.db-journal
@@ -18,32 +41,24 @@ data/
 *.dabackup.part
 *.db.restore
 *.db.before-restore
+*.db.restore-check
 
-# Secrets and environment files (DriveAtlas has none, but keep them out if they ever appear)
+# Secrets and environment files
 .env
 .env.*
-!.env.example
 *.pem
 *.key
 *.p12
 *.pfx
+*.keystore
+*.jks
 secrets/
 keystore.properties
 
-# Android
-android/.gradle/
-android/app/build/
-android/local.properties
-*.keystore
-*.jks
-
-# Temporary files from the mockup renderer
-design/ui-mockups/_measure.html
-
-# OS and editors
+# Logs, OS and editor files
+*.log
 Thumbs.db
 desktop.ini
 .DS_Store
 .vscode/
 .idea/
-*.log

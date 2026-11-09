@@ -21,7 +21,7 @@ import { uuid, plainObject, driveInput, searchInput, browseInput, folderPath, te
 import { RateLimiter, LoginGuard } from './ratelimit.mjs';
 import { findSmartctl, installSmartctl, readHealthElevated, applyHealth, healthHistory } from './health.mjs';
 import {
-  rememberBackupKey, hasBackupKey, backupSettings, createBackup, recentBackups, stageRestore, moveCatalog, pruneBackups, MAX_BACKUP_BYTES
+  rememberBackupKey, hasBackupKey, backupSettings, createBackup, recentBackups, stageRestore, moveCatalog, pruneBackups, MAX_BACKUP_BYTES, backupRunning
 } from './backup.mjs';
 
 const COOKIE = 'da_session';
@@ -34,7 +34,7 @@ const delay = (ms) => new Promise((r) => setTimeout(r, ms));
 export const SCAN_DEFAULTS = { media: true, fingerprint: true, hidden: true, keepScans: 3, exclude: [] };
 export const scanDefaults = (db) => ({ ...SCAN_DEFAULTS, ...getSetting(db, 'scanDefaults', {}) });
 
-export function createHub({ db, watcher, scans, restart }) {
+export function createHub({ db, watcher, scans, restart, stop }) {
   const router = new Router();
   const clients = new Set();
   const general = new RateLimiter({ windowMs: 60_000, max: 600 });
@@ -146,6 +146,15 @@ export function createHub({ db, watcher, scans, restart }) {
     owner: getOwner(db),
     testMode: TEST_MODE
   }));
+
+  // Stops the hub (Settings > Stop DriveAtlas). Start it again with DriveAtlas.vbs or the Start menu shortcut.
+  router.on('POST', '/api/hub/stop', () => {
+    if (scans.status().active) throw httpError(409, 'A scan is running. Cancel it or let it finish, then stop DriveAtlas.');
+    if (backupRunning()) throw httpError(409, 'A backup is being made. Wait for it to finish, then stop DriveAtlas.');
+    broadcast('stopping', {});
+    stop();
+    return { ok: true, stopping: true };
+  });
 
   router.on('PUT', '/api/settings/backup', async (ctx) => {
     const body = plainObject(await readJson(ctx.req));

@@ -4,7 +4,7 @@ import { Card, Field, ErrorNote, Button, Icon } from '../components.js';
 import { RestoreForm, waitForHub } from './restore-form.js';
 import { fmtBytes, fmtDateTime, timeAgo } from '/shared/format.js';
 
-export function Settings({ onTheme, onSignedOut }) {
+export function Settings({ onTheme, onSignedOut, onStopped }) {
   const [s, setS] = useState(null);
   const [error, setError] = useState('');
   const load = () => api('GET', '/api/settings/all').then(setS).catch((e) => setError(e.message));
@@ -37,9 +37,31 @@ export function Settings({ onTheme, onSignedOut }) {
             <div class="kv-row"><dt>Catalog</dt><dd class="mono small break">${s.dataDir}</dd></div>
             <div class="kv-row"><dt>Log file</dt><dd class="mono small break">${s.logPath}</dd></div>
           </dl>
+          <${StopHub} onStopped=${onStopped} />
         </${Card}>
       </div>
     </div>
+  </div>`;
+}
+
+// Stops the hub after a confirm step. Open windows switch to the "stopped" screen.
+function StopHub({ onStopped }) {
+  const [confirm, setConfirm] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  async function stop() {
+    setError(''); setBusy(true);
+    try { await api('POST', '/api/hub/stop'); onStopped(); } catch (e) { setError(e.message); setBusy(false); }
+  }
+  return html`<div class="card-body stack-sm">
+    <p class="small muted mt0">DriveAtlas keeps running in the background so it can spot drives you plug in and make daily backups. Stop it when you don't need it.</p>
+    ${confirm
+      ? html`<div class="inline-form">
+          <${Button} kind="danger" icon="x" onClick=${stop} disabled=${busy}>${busy ? 'Stopping…' : 'Yes, stop DriveAtlas'}</${Button}>
+          <${Button} onClick=${() => setConfirm(false)} disabled=${busy}>Keep running</${Button}>
+        </div>`
+      : html`<div><${Button} icon="x" onClick=${() => setConfirm(true)}>Stop DriveAtlas</${Button}></div>`}
+    <${ErrorNote} error=${error} />
   </div>`;
 }
 

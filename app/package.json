@@ -9,9 +9,7 @@
   },
   "scripts": {
     "start": "node --disable-warning=ExperimentalWarning hub/main.mjs",
-    "open": "node --disable-warning=ExperimentalWarning hub/main.mjs --open",
-    "vendor": "node scripts/vendor.mjs",
-    "check": "node --disable-warning=ExperimentalWarning scripts/check.mjs"
+    "open": "node --disable-warning=ExperimentalWarning hub/main.mjs --open"
   },
   "devDependencies": {
     "htm": "3.1.1",

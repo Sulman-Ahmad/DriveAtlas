@@ -33,20 +33,32 @@ function applyTheme(theme) {
   else delete document.documentElement.dataset.theme;
 }
 
+// Shown in every open window after DriveAtlas is stopped from Settings.
+function Stopped() {
+  return html`<main class="welcome"><div class="welcome-card">
+    <div class="brand brand-lg"><span class="brand-mark"><${Icon} name="atlas" size=${22} /></span>DriveAtlas</div>
+    <h1>DriveAtlas has stopped</h1>
+    <p class="muted">Nothing is running in the background now. You can close this window.</p>
+    <p class="small muted">To start it again, double-click <code>DriveAtlas.vbs</code>, or use the DriveAtlas shortcut in the Start menu if you added it.</p>
+  </div></main>`;
+}
+
 function App() {
   const [state, setState] = useState(null);
   const [fatal, setFatal] = useState('');
+  const [stopped, setStopped] = useState(false);
   const loadState = () => api('GET', '/api/state').then((s) => { setState(s); applyTheme(s.settings.theme); }).catch((e) => setFatal(e.message));
   useEffect(() => { loadState(); }, []);
 
+  if (stopped) return html`<${Stopped} />`;
   if (fatal) return html`<main class="welcome"><div class="welcome-card"><h1>Can't reach the DriveAtlas hub</h1><p class="muted">${fatal}</p><p class="small muted">Start DriveAtlas again from the Start menu or <code>DriveAtlas.cmd</code>.</p></div></main>`;
   if (!state) return html`<main class="welcome"><p class="muted">Starting…</p></main>`;
   if (!state.hasOwner) return html`<${Setup} state=${state} onDone=${loadState} />`;
   if (!state.signedIn) return html`<${Login} onDone=${loadState} />`;
-  return html`<${Main} state=${state} onSignedOut=${loadState} onTheme=${(t) => { applyTheme(t); setState({ ...state, settings: { ...state.settings, theme: t } }); }} />`;
+  return html`<${Main} state=${state} onSignedOut=${loadState} onStopped=${() => setStopped(true)} onTheme=${(t) => { applyTheme(t); setState({ ...state, settings: { ...state.settings, theme: t } }); }} />`;
 }
 
-function Main({ state, onSignedOut, onTheme }) {
+function Main({ state, onSignedOut, onStopped, onTheme }) {
   const route = useHashRoute();
   const [data, setData] = useState({ summary: null, connected: [], drives: [], ready: false, version: 0, scanStatus: null, lastScan: null });
   const [toasts, setToasts] = useState([]);
@@ -71,6 +83,7 @@ function Main({ state, onSignedOut, onTheme }) {
   useEffect(() => {
     refresh();
     const es = new EventSource('/api/events');
+    es.addEventListener('stopping', () => { es.close(); onStopped(); });
     es.addEventListener('disks', refresh);
     es.addEventListener('catalog', refresh);
     es.addEventListener('plugged', (e) => {
@@ -120,7 +133,7 @@ function Main({ state, onSignedOut, onTheme }) {
   else if (route.name === 'search') screen = html`<${Search} data=${data} query=${route.query} />`;
   else if (route.name === 'files' && route.id) screen = html`<${Files} driveId=${route.id} data=${data} query=${route.query} />`;
   else if (route.name === 'scan') screen = html`<${Scan} data=${data} />`;
-  else if (route.name === 'settings') screen = html`<${Settings} onTheme=${setTheme} onSignedOut=${onSignedOut} />`;
+  else if (route.name === 'settings') screen = html`<${Settings} onTheme=${setTheme} onSignedOut=${onSignedOut} onStopped=${onStopped} />`;
   else screen = html`<${Home} data=${data} />`;
 
   const activeScan = data.scanStatus?.active;
