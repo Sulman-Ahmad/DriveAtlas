@@ -76,6 +76,8 @@ export function matchIdsFor(disk) {
   for (const p of disk.partitions) {
     if (p.guid) ids.push(`pguid:${p.guid}`);
     if (p.volumeSerial) ids.push(`vol:${p.volumeSerial}:${Math.round(p.size / 1e6)}`);
+    // Size-free form, so the same USB drive recorded on a phone (which sees a slightly different size) matches.
+    if (p.volumeSerial) ids.push(`volserial:${p.volumeSerial}`);
   }
   return [...new Set(ids)];
 }

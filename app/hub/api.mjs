@@ -34,7 +34,7 @@ const delay = (ms) => new Promise((r) => setTimeout(r, ms));
 export const SCAN_DEFAULTS = { media: true, fingerprint: true, hidden: true, keepScans: 3, exclude: [] };
 export const scanDefaults = (db) => ({ ...SCAN_DEFAULTS, ...getSetting(db, 'scanDefaults', {}) });
 
-export function createHub({ db, watcher, scans, restart, stop }) {
+export function createHub({ db, watcher, scans, lan, restart, stop }) {
   const router = new Router();
   const clients = new Set();
   const general = new RateLimiter({ windowMs: 60_000, max: 600 });
@@ -325,6 +325,11 @@ export function createHub({ db, watcher, scans, restart, stop }) {
   });
 
   // ---- Health ----
+  // ---- Linked phones (Wi-Fi sync) ----
+  router.on('GET', '/api/devices', () => ({ ...lan.status(), devices: lan.devices() }));
+  router.on('POST', '/api/devices/link', async (ctx) => { throttle(ctx, 'link'); return lan.beginPairing(); });
+  router.on('POST', '/api/devices/:id/unlink', async (ctx) => { await lan.unlink(uuid(ctx.params.id, 'device')); return { ok: true }; });
+
   router.on('GET', '/api/health', () => ({ smartctl: findSmartctl() }));
   router.on('POST', '/api/health/read', async (ctx) => {
     throttle(ctx, 'health');

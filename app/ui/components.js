@@ -2,7 +2,7 @@
 import { html, useState, useEffect, useLayoutEffect, useMemo, useRef } from './lib.js';
 import { Icon } from './icons.js';
 import { typeById, statusName, BOOT_KINDS } from '/shared/drive-types.js';
-import { fmtBytes, percent } from '/shared/format.js';
+import { fmtBytes, percent, timeAgo } from '/shared/format.js';
 
 export { Icon };
 
@@ -11,7 +11,7 @@ export function TypeTile({ type, size = 40, accent = false }) {
   return html`<span class=${`tile ${accent ? 'tile-accent' : ''}`} style=${`width:${size}px;height:${size}px`}><${Icon} name=${t.icon} size=${Math.round(size * 0.55)} /></span>`;
 }
 
-export const NO_HEALTH_TYPES = ['usb', 'sd', 'microsd', 'cf', 'other'];
+export const NO_HEALTH_TYPES = ['usb', 'sd', 'microsd', 'cf', 'phone', 'other'];
 
 // Uses a full health reading (state + %) when there is one, else Windows' Healthy / Warning / Unhealthy.
 export function healthInfo(health, type, state, pct) {
@@ -38,6 +38,9 @@ export function HealthPill({ health, type, state, pct }) {
 
 export function StatusPill({ drive }) {
   const letters = drive.letters && drive.letters.length ? ` · ${drive.letters.map((l) => `${l}:`).join(' ')}` : '';
+  if (drive.liveStatus === 'thisphone') return html`<${Pill} tone="good" icon="phone">This phone</${Pill}>`;
+  // A linked phone seen from the PC (or another phone): when it last synced its storage.
+  if (drive.type === 'phone' && !drive.connected) return html`<${Pill} tone="plain" icon="phone">${drive.last_seen_at ? `Phone · seen ${timeAgo(drive.last_seen_at)}` : 'Phone'}</${Pill}>`;
   if (drive.liveStatus === 'plugged') return html`<${Pill} tone="good" dot>Plugged in${letters}</${Pill}>`;
   if (drive.liveStatus === 'inpc') return html`<${Pill} tone="plain">In PC${letters}</${Pill}>`;
   if (drive.liveStatus === 'lent') return html`<${Pill} tone="warn" icon="user">${drive.lent_to ? `Lent to ${drive.lent_to}` : 'Lent out'}</${Pill}>`;

@@ -1,7 +1,10 @@
 name: Android APK
 
-# Builds an installable test APK whenever the shared interface or the Android app changes.
-# Download it from the run's Artifacts section on GitHub.
+# Builds the Android app whenever the shared interface or the Android app changes.
+# With the signing key set up (repository secrets ANDROID_KEYSTORE_BASE64 and ANDROID_KEYSTORE_PASSWORD),
+# each build is signed with the same key and published to GitHub Releases as a test build, so a new
+# version installs over the old one and the phone keeps its catalog. Without the key, the APK is only
+# kept as a run artifact (signed with a throwaway key, so it cannot update an installed app).
 on:
   push:
     branches: [main]
@@ -13,7 +16,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: android-${{ github.ref }}
@@ -22,7 +25,9 @@ concurrency:
 jobs:
   apk:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 40
+    env:
+      HAS_KEY: ${{ secrets.ANDROID_KEYSTORE_BASE64 != '' && secrets.ANDROID_KEYSTORE_PASSWORD != '' }}
     steps:
       - uses: actions/checkout@v4
 
@@ -43,26 +48,75 @@ jobs:
         working-directory: mobile
         run: node build-www.mjs
 
-      - name: Create the Android project
+      - name: Create the Android project with DriveAtlas's own code, icon and splash screen
         working-directory: mobile
         run: |
           npx cap add android
+          node native/patch-android.mjs
+          npx capacitor-assets generate --android --iconBackgroundColor '#0F766E' --iconBackgroundColorDark '#0F766E' --splashBackgroundColor '#F4F7F6' --splashBackgroundColorDark '#0C1312'
           npx cap sync android
 
-      - name: Build the test APK
+      - name: Set the version
+        working-directory: mobile/android/app
+        run: |
+          VERSION_NAME="$(node -p "require('../../package.json').version")-test.${GITHUB_RUN_NUMBER}"
+          sed -i -E "s/versionCode [0-9]+/versionCode ${GITHUB_RUN_NUMBER}/" build.gradle
+          sed -i -E "s/versionName \"[^\"]*\"/versionName \"${VERSION_NAME}\"/" build.gradle
+          grep -E "versionCode|versionName" build.gradle
+          echo "VERSION_NAME=${VERSION_NAME}" >> "$GITHUB_ENV"
+
+      - name: Build the release APK
+        if: env.HAS_KEY == 'true'
         working-directory: mobile/android
         run: |
           chmod +x gradlew
-          ./gradlew assembleDebug --no-daemon --stacktrace
+          ./gradlew assembleRelease --no-daemon --stacktrace
 
-      - name: Name the APK
+      - name: Sign the APK
+        if: env.HAS_KEY == 'true'
+        env:
+          KS_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KS_PASS: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
         run: |
+          set -euo pipefail
+          BT="$ANDROID_HOME/build-tools/$(ls "$ANDROID_HOME/build-tools" | sort -V | tail -1)"
+          echo "$KS_BASE64" | base64 -d > "$RUNNER_TEMP/release.p12"
+          UNSIGNED=mobile/android/app/build/outputs/apk/release/app-release-unsigned.apk
           mkdir -p dist
-          cp mobile/android/app/build/outputs/apk/debug/app-debug.apk "dist/DriveAtlas-${GITHUB_SHA::7}-test.apk"
+          "$BT/zipalign" -p -f 4 "$UNSIGNED" "$RUNNER_TEMP/aligned.apk"
+          "$BT/apksigner" sign --ks "$RUNNER_TEMP/release.p12" --ks-type PKCS12 --ks-key-alias driveatlas \
+            --ks-pass env:KS_PASS --key-pass env:KS_PASS \
+            --out "dist/DriveAtlas-${VERSION_NAME}.apk" "$RUNNER_TEMP/aligned.apk"
+          "$BT/apksigner" verify --print-certs "dist/DriveAtlas-${VERSION_NAME}.apk" | grep -E "Signer #1 certificate (DN|SHA-256)"
+          rm -f "$RUNNER_TEMP/release.p12"
+
+      - name: Build a test APK (no signing key yet)
+        if: env.HAS_KEY != 'true'
+        working-directory: mobile/android
+        run: |
+          echo "::warning::Signing key secrets are not set, so this APK uses a throwaway key and is not published to Releases."
+          chmod +x gradlew
+          ./gradlew assembleDebug --no-daemon --stacktrace
+          mkdir -p ../../dist
+          cp app/build/outputs/apk/debug/app-debug.apk "../../dist/DriveAtlas-${VERSION_NAME}-unsigned-test.apk"
 
       - uses: actions/upload-artifact@v4
         with:
-          name: DriveAtlas-test-apk
+          name: DriveAtlas-apk
           path: dist/*.apk
           retention-days: 30
           if-no-files-found: error
+
+      - name: Publish to GitHub Releases
+        if: env.HAS_KEY == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          TAG="test-${GITHUB_RUN_NUMBER}"
+          gh release create "$TAG" dist/*.apk --target "$GITHUB_SHA" --prerelease \
+            --title "DriveAtlas ${VERSION_NAME}" \
+            --notes "Test build ${GITHUB_RUN_NUMBER} from ${GITHUB_SHA::7}. Download the APK on your phone and open it to install or update (allow \"Install unknown apps\" once)."
+          # Keep the newest 5 test builds.
+          gh release list --limit 100 --json tagName,isPrerelease --jq '.[] | select(.isPrerelease) | .tagName' \
+            | grep '^test-' | tail -n +6 | while read -r old; do gh release delete "$old" --yes --cleanup-tag; done

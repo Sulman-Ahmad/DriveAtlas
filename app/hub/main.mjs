@@ -9,6 +9,7 @@ import {
 } from './config.mjs';
 import { applyStagedRestore, startBackupScheduler } from './backup.mjs';
 import { openDb } from './db.mjs';
+import { createLan } from './lan.mjs';
 import { deleteExpiredSessions } from './auth.mjs';
 import { DiskWatcher, diskKey } from './disks.mjs';
 import { createHub, scanDefaults } from './api.mjs';
@@ -41,7 +42,9 @@ const watcher = new DiskWatcher();
 const scans = new ScanManager(db, DB_PATH, () => scanDefaults(db));
 const url = `http://localhost:${PORT}/`;
 let server;
-const hub = createHub({ db, watcher, scans, restart, stop: () => setTimeout(shutdown, 400) });
+// Wi-Fi access for linked phones; runs only while a device is linked or a link code is waiting.
+const lan = createLan({ db, onChange: (what) => hub.broadcast(what === 'devices' ? 'devices' : 'catalog', { reason: 'sync' }) });
+const hub = createHub({ db, watcher, scans, lan, restart, stop: () => setTimeout(shutdown, 400) });
 
 let lastProgress = 0;
 scans.on('progress', (view) => {
@@ -106,6 +109,7 @@ export function openWindow() {
 // Restarts the hub (after a restore or a catalog move). Open windows reconnect on their own.
 function restart() {
   console.log('[hub] restarting');
+  lan.stop();
   scans.stop();
   watcher.stop();
   server.close();
@@ -144,12 +148,14 @@ server.listen(PORT, HOST, () => {
   if (restored) console.log('[hub] a backup was restored; the previous catalog was kept as driveatlas.db.before-restore');
   if (TEST_MODE) console.log('[hub] TEST MODE: sample-folder scans allowed. Never use test mode with your real catalog.');
   watcher.start();
+  lan.update().catch((err) => console.error('[lan]', err.message));
   if (OPEN_WINDOW) openWindow();
 });
 
 // Stops the hub for good (Ctrl+C, Windows shutting down, or Stop DriveAtlas in Settings).
 function shutdown() {
   console.log('[hub] stopping');
+  lan.stop();
   scans.stop();
   watcher.stop();
   server.close();

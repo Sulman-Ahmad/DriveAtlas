@@ -71,7 +71,7 @@ export function Search({ data, query }) {
     <${ErrorNote} error=${error} />
 
     ${!f.q.trim() ? html`<div class="card card-body">${scannedDrives.length
-      ? html`<${Empty} icon="search" title="Type part of a file or folder name">Every word must match the start of a word in the name, so "wedding 19" finds "2019 Wedding". Results include drives that are not plugged in.</${Empty}>`
+      ? html`<${Empty} icon="search" title="Type part of a file or folder name">Every word must match the start of a word in the name, so "wed high" finds "2019 Wedding Highlights". Results include drives that are not plugged in.</${Empty}>`
       : html`<${Empty} icon="scan" title="Scan a drive first">Search looks through the file lists made by scans. <a class="link" href="#/scan">Scan a drive</a> and its files show up here, even after you unplug it.</${Empty}>`}</div>` : null}
 
     ${res && !res.total ? html`<div class="card card-body"><${Empty} icon="search" title="Nothing found">No file or folder name matches "${f.q}". Try fewer or shorter words, or include hidden files.</${Empty}></div>` : null}

@@ -1,5 +1,6 @@
 // Scan: run and watch scans, pick drives, and set what scans record.
 import { html, useState, useEffect, api } from '../lib.js';
+import { startScan } from '../scan-start.js';
 import { Icon, TypeTile, Card, Button, Empty, ErrorNote, CapacityBar, Lead, HelpTip } from '../components.js';
 import { LEADS, HELP } from '../help.js';
 import { fmtBytes, fmtNumber, fmtSeconds, timeAgo } from '/shared/format.js';
@@ -22,7 +23,7 @@ export function Scan({ data }) {
   async function start(driveId) {
     setStarting(driveId);
     setError('');
-    try { await api('POST', `/api/drives/${driveId}/scan`, {}); } catch (e) { setError(e.message); } finally { setStarting(''); }
+    try { await startScan(driveId); } catch (e) { setError(e.message); } finally { setStarting(''); }
   }
 
   const name = (id) => data.drives.find((d) => d.id === id)?.name || 'Drive';

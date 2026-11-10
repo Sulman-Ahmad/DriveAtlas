@@ -67,5 +67,9 @@ export const HELP = {
   backupPassword: 'Each backup is locked with the password you had when it was made. If you changed your password since then, use the old one.',
   catalogFolder: 'The catalog is the file that holds your drives, scans and settings. Move it if your Windows drive is short of space. Your drives themselves are not affected.',
   smartmontools: 'A free, widely used tool that reads a drive’s own health records (S.M.A.R.T.). Installing it adds power-on hours, data written, NVMe wear and bad sectors to health readings.',
+  allFiles: 'Android only lets an app see whole drives with this permission. DriveAtlas uses it to record names, sizes and dates; it never opens, copies or changes your files. Without it you pick the drive or folder each time you scan.',
+  phoneLock: 'The PIN and fingerprint only open DriveAtlas on this phone. The PIN is stored as a scrambled check value, never as the PIN itself, and it never leaves the phone.',
+  linkPc: 'Linking keeps the same catalog on this phone and your PC. Both work on their own; when they are on the same Wi-Fi they swap changes, and the phone shows up in the PC’s drive list.',
+  devices: 'Link your phone once and both keep the whole catalog. When they are on the same Wi-Fi they swap changes; the phone and its storage show up in Drives here. Linking opens a Wi-Fi-only connection on this PC that answers linked devices only.',
   stop: 'DriveAtlas runs quietly in the background so it can notice drives you plug in and make daily backups. Stopping it ends that until you start it again.'
 };

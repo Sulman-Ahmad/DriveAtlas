@@ -1,7 +1,8 @@
 // App root: sign-in gate, sidebar, routing, live updates and plug-in toasts.
-import { html, render, useState, useEffect, useRef, api } from './lib.js';
+import { html, render, useState, useEffect, useRef, api, openEvents, useLocalBackend } from './lib.js';
 import { Icon } from './components.js';
-import { Setup, Login, AboutPage, PhoneStart } from './screens/welcome.js';
+import { Setup, Login, AboutPage } from './screens/welcome.js';
+import { PhoneSetup, PhoneUnlock, PhoneLink } from './screens/phone-welcome.js';
 import { Home } from './screens/home.js';
 import { Drives } from './screens/drives.js';
 import { AddDrive } from './screens/add.js';
@@ -11,6 +12,8 @@ import { Files } from './screens/files.js';
 import { Scan } from './screens/scan.js';
 import { Settings } from './screens/settings.js';
 import { fmtNumber, fmtBytes } from '/shared/format.js';
+
+const IS_PHONE_APP = Boolean(window.Capacitor && typeof window.Capacitor.isNativePlatform === 'function' && window.Capacitor.isNativePlatform());
 
 function parseRoute(hash) {
   const [path, qs] = (hash.replace(/^#/, '') || '/').split('?');
@@ -52,9 +55,9 @@ function App() {
 
   if (stopped) return html`<${Stopped} />`;
   if (fatal) return html`<main class="welcome"><div class="welcome-card"><h1>Can't reach the DriveAtlas hub</h1><p class="muted">${fatal}</p><p class="small muted">Start DriveAtlas again from the Start menu or <code>DriveAtlas.cmd</code>.</p></div></main>`;
-  if (!state) return html`<main class="welcome"><p class="muted">Starting…</p></main>`;
-  if (!state.hasOwner) return html`<${Setup} state=${state} onDone=${loadState} />`;
-  if (!state.signedIn) return html`<${Login} onDone=${loadState} />`;
+  if (!state) return html`<main class="boot" aria-label="Starting DriveAtlas"><span class="boot-mark"><${Icon} name="atlas" size=${40} /></span><span class="boot-name">DriveAtlas</span></main>`;
+  if (!state.hasOwner) return IS_PHONE_APP ? html`<${PhoneSetup} state=${state} onDone=${loadState} />` : html`<${Setup} state=${state} onDone=${loadState} />`;
+  if (!state.signedIn) return IS_PHONE_APP ? html`<${PhoneUnlock} state=${state} onDone=${loadState} />` : html`<${Login} onDone=${loadState} />`;
   return html`<${Main} state=${state} onSignedOut=${loadState} onStopped=${() => setStopped(true)} onTheme=${(t) => { applyTheme(t); setState({ ...state, settings: { ...state.settings, theme: t } }); }} />`;
 }
 
@@ -82,7 +85,8 @@ function Main({ state, onSignedOut, onStopped, onTheme }) {
 
   useEffect(() => {
     refresh();
-    const es = new EventSource('/api/events');
+    const es = openEvents();
+    es.addEventListener('locked', () => onSignedOut());
     es.addEventListener('stopping', () => { es.close(); onStopped(); });
     es.addEventListener('disks', refresh);
     es.addEventListener('catalog', refresh);
@@ -134,6 +138,7 @@ function Main({ state, onSignedOut, onStopped, onTheme }) {
   else if (route.name === 'files' && route.id) screen = html`<${Files} driveId=${route.id} data=${data} query=${route.query} />`;
   else if (route.name === 'scan') screen = html`<${Scan} data=${data} />`;
   else if (route.name === 'about') screen = html`<${AboutPage} />`;
+  else if (route.name === 'link' && IS_PHONE_APP) screen = html`<div class="page"><${PhoneLink} embedded onDone=${() => { refresh(); location.hash = '#/settings'; }} onBack=${() => { location.hash = '#/settings'; }} /></div>`;
   else if (route.name === 'settings') screen = html`<${Settings} onTheme=${setTheme} onSignedOut=${onSignedOut} onStopped=${onStopped} />`;
   else screen = html`<${Home} data=${data} />`;
 
@@ -170,7 +175,7 @@ function Main({ state, onSignedOut, onStopped, onTheme }) {
         </div>
       </div>
     </aside>
-    <main class="content">${screen}</main>
+    <main class="content" key=${`${route.name}/${route.id || ''}`}>${screen}</main>
     <div class="toasts" aria-live="polite">
       ${toasts.map((t) => html`<div class="toast" role="status" key=${t.id}>
         <span class="tile tile-accent"><${Icon} name=${t.icon} size=${18} /></span>
@@ -182,6 +187,11 @@ function Main({ state, onSignedOut, onStopped, onTheme }) {
   </div>`;
 }
 
-// Inside the Android app there is no hub on the phone itself; it starts with pairing instead.
-const IS_PHONE_APP = Boolean(window.Capacitor && typeof window.Capacitor.isNativePlatform === 'function' && window.Capacitor.isNativePlatform());
-render(IS_PHONE_APP ? html`<${PhoneStart} />` : html`<${App} />`, document.getElementById('app'));
+// Inside the Android app the catalog lives on the phone itself, answered by the phone's local API.
+if (IS_PHONE_APP) {
+  document.documentElement.classList.add('is-phone');
+  const local = await import('./phone/local-api.js');
+  useLocalBackend(local.handle, local.openEvents);
+  local.startPhone().catch((err) => console.error(err));
+}
+render(html`<${App} />`, document.getElementById('app'));

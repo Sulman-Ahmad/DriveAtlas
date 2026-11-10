@@ -14,10 +14,7 @@ const STATUSES = new Set(['inpc', 'stored', 'lent', 'retired']);
 
 const now = () => Date.now();
 
-function logChange(db, table, id, fields, deleted = 0) {
-  db.prepare('INSERT INTO change_log (table_name, row_id, changed_at, device_id, fields, deleted) VALUES (?, ?, ?, ?, ?, ?)')
-    .run(table, id, now(), 'hub', JSON.stringify(fields || []), deleted);
-}
+// Changes are recorded in change_log automatically by database triggers (schema migration 4).
 
 function rowToDrive(row) {
   if (!row) return null;
@@ -153,7 +150,6 @@ export function createDrive(db, input, disk = null) {
       created_at: t, updated_at: t, last_seen_at: disk ? t : null
     });
     if (disk) writePartitions(db, id, disk);
-    logChange(db, 'drives', id, Object.keys(d));
   });
   return getDrive(db, id);
 }
@@ -169,14 +165,18 @@ export function updateDrive(db, id, patch) {
   if (!keys.length) return current;
   const values = keys.map((k) => (k === 'tags' ? JSON.stringify(fields[k] || []) : fields[k] === '' ? null : fields[k]));
   db.prepare(`UPDATE drives SET ${keys.map((k) => `${k} = ?`).join(', ')}, updated_at = ? WHERE id = ?`).run(...values, now(), id);
-  logChange(db, 'drives', id, keys);
   return getDrive(db, id);
 }
 
 export function deleteDrive(db, id) {
-  const r = db.prepare('DELETE FROM drives WHERE id = ?').run(id);
-  if (!r.changes) throw httpError(404, 'That drive is not in your catalog.');
-  logChange(db, 'drives', id, [], 1);
+  tx(db, () => {
+    // Entries go with the drive (ON DELETE CASCADE); their search index rows must go too, or a later scan
+    // that reuses the same row numbers would be found under these old names.
+    db.prepare(`INSERT INTO entries_fts(entries_fts, rowid, name) SELECT 'delete', e.id, e.name FROM entries e JOIN scans s ON s.id = e.scan_id
+      WHERE s.drive_id = ? AND s.indexed = 1 AND e.eid > 0`).run(id);
+    const r = db.prepare('DELETE FROM drives WHERE id = ?').run(id);
+    if (!r.changes) throw httpError(404, 'That drive is not in your catalog.');
+  });
 }
 
 // Differences between a drive's record and the disk now plugged in. Each one is
@@ -239,7 +239,6 @@ export function applyChanges(db, id, disk, { status } = {}) {
     }
     if (status && STATUSES.has(status)) db.prepare('UPDATE drives SET status = ?, updated_at = ? WHERE id = ?').run(status, now(), id);
     db.prepare('DELETE FROM pending_changes WHERE drive_id = ?').run(id);
-    logChange(db, 'drives', id, ['partitions', 'status']);
   });
   return getDrive(db, id);
 }

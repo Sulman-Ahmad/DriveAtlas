@@ -3,15 +3,16 @@ import { html, useState, api } from '../lib.js';
 import { Icon, Field, ErrorNote } from '../components.js';
 import { RestoreForm } from './restore-form.js';
 
-function Shell({ title, lead, children }) {
-  return html`<main class="welcome">
+export function Shell({ title, lead, children, embedded = false }) {
+  const Wrap = embedded ? 'div' : 'main';
+  return html`<${Wrap} class=${embedded ? 'welcome welcome-embedded' : 'welcome'}>
     <div class="welcome-card">
       <div class="brand brand-lg"><span class="brand-mark"><${Icon} name="atlas" size=${22} /></span>DriveAtlas</div>
       <h1>${title}</h1>
       <p class="muted">${lead}</p>
       ${children}
     </div>
-  </main>`;
+  </${Wrap}>`;
 }
 
 const BENEFITS = [
@@ -136,20 +137,4 @@ export function Login({ onDone }) {
       <button class="btn btn-primary btn-block" type="submit" disabled=${busy}>${busy ? 'Signing in…' : 'Sign in'}</button>
     </form>
   </${Shell}>`;
-}
-
-// The Android app's first screen until pairing arrives: the introduction, then pairing with the laptop.
-export function PhoneStart() {
-  const [pairing, setPairing] = useState(false);
-  return html`<main class="welcome"><div class="welcome-card welcome-wide">
-    <${IntroContent} />
-    ${pairing
-      ? html`<div class="callout callout-accent" role="status"><${Icon} name="laptop" size=${20} />
-          <div class="grow"><strong>Pairing arrives in the next update</strong>
-            <div class="small">You will open DriveAtlas on your laptop, go to Settings, Phone and helper PCs, and scan the QR code shown there. The phone then keeps its own copy of your catalog and syncs on your home Wi-Fi.</div></div></div>`
-      : null}
-    <div class="intro-actions">
-      <button type="button" class="btn btn-primary" onClick=${() => setPairing(true)}><${Icon} name="laptop" size=${16} />Pair with my laptop</button>
-    </div>
-  </div></main>`;
 }

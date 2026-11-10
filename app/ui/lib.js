@@ -6,8 +6,17 @@ import htm from '/vendor/htm.mjs';
 export const html = htm.bind(h);
 export { h, render, Fragment, useState, useEffect, useLayoutEffect, useMemo, useRef, useCallback };
 
+// In the Android app the catalog lives on the phone: api() and openEvents() go to the phone's own
+// local API instead of the PC hub. Set once at start-up by app.js.
+let localHandler = null;
+let eventsFactory = () => new EventSource('/api/events');
+export function useLocalBackend(handle, openEvents) { localHandler = handle; eventsFactory = openEvents; }
+export const openEvents = () => eventsFactory();
+export const isLocalBackend = () => Boolean(localHandler);
+
 // Calls the hub API. Throws an Error with the hub's message on failure.
 export async function api(method, url, body) {
+  if (localHandler) return localHandler(method, url, body);
   const res = await fetch(url, {
     method,
     credentials: 'same-origin',

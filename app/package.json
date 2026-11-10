@@ -1,6 +1,6 @@
 {
   "name": "driveatlas",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "description": "DriveAtlas hub and app: a private catalog of every drive you own and every file on it.",
   "type": "module",

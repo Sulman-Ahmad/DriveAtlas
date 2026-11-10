@@ -1,5 +1,6 @@
 // Files: browse a drive's folders from its latest scan, plugged in or not.
 import { html, useState, useEffect, api, go } from '../lib.js';
+import { startScan } from '../scan-start.js';
 import { Icon, Pill, Empty, ErrorNote, Button, Lead } from '../components.js';
 import { LEADS } from '../help.js';
 import { FileDetail } from './file-detail.js';
@@ -36,7 +37,7 @@ export function Files({ driveId, data, query }) {
 
   async function scanNow() {
     setBusy(true);
-    try { await api('POST', `/api/drives/${driveId}/scan`, {}); go('#/scan'); } catch (e) { setError(e.message); setBusy(false); }
+    try { await startScan(driveId); go('#/scan'); } catch (e) { setError(e.message); setBusy(false); }
   }
 
   if (!drive) return html`<div class="page"><${ErrorNote} error="That drive is not in your catalog." /></div>`;

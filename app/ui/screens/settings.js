@@ -1,11 +1,16 @@
 // Settings: account, backups, catalog folder, drive health tools, appearance.
-import { html, useState, useEffect, api } from '../lib.js';
+import { html, useState, useEffect, api, isLocalBackend } from '../lib.js';
+import { PhoneSettings } from './phone-settings.js';
 import { Card, Field, ErrorNote, Button, Icon, Lead, HelpTip } from '../components.js';
 import { LEADS, HELP } from '../help.js';
 import { RestoreForm, waitForHub } from './restore-form.js';
 import { fmtBytes, fmtDateTime, timeAgo } from '/shared/format.js';
 
-export function Settings({ onTheme, onSignedOut, onStopped }) {
+export function Settings(props) {
+  return isLocalBackend() ? html`<${PhoneSettings} ...${props} />` : html`<${PcSettings} ...${props} />`;
+}
+
+function PcSettings({ onTheme, onSignedOut, onStopped }) {
   const [s, setS] = useState(null);
   const [error, setError] = useState('');
   const load = () => api('GET', '/api/settings/all').then(setS).catch((e) => setError(e.message));
@@ -23,6 +28,7 @@ export function Settings({ onTheme, onSignedOut, onStopped }) {
           <${RestoreForm} needsCurrentPassword />
         </${Card}>
         <${FolderCard} s=${s} />
+        <${DevicesCard} />
       </div>
       <div class="col-side stack-lg">
         <${PasswordCard} onSignedOut=${onSignedOut} />
@@ -46,6 +52,57 @@ export function Settings({ onTheme, onSignedOut, onStopped }) {
       </div>
     </div>
   </div>`;
+}
+
+// Linked phones (and later helper PCs): link with a one-time code, see when each last synced, unlink.
+function DevicesCard() {
+  const [d, setD] = useState(null);
+  const [pair, setPair] = useState(null);
+  const [now, setNow] = useState(Date.now());
+  const [msg, setMsg] = useState('');
+  const [error, setError] = useState('');
+  const load = () => api('GET', '/api/devices').then((r) => { setD(r); return r; }).catch((e) => setError(e.message));
+  useEffect(() => { load(); }, []);
+  useEffect(() => {
+    if (!pair) return undefined;
+    const t = setInterval(async () => {
+      setNow(Date.now());
+      const r = await load();
+      if (r && r.devices.length > pair.before) {
+        const fresh = r.devices[r.devices.length - 1];
+        setPair(null);
+        setMsg(`Linked ${fresh.name}. It is syncing now.`);
+      } else if (Date.now() > pair.expiresAt) setPair(null);
+    }, 2000);
+    return () => clearInterval(t);
+  }, [pair]);
+  async function start() {
+    setError(''); setMsg('');
+    try { const r = await api('POST', '/api/devices/link'); setPair({ ...r, before: d ? d.devices.length : 0 }); setNow(Date.now()); } catch (e) { setError(e.message); }
+  }
+  async function unlink(dev) {
+    if (!window.confirm(`Unlink ${dev.name}? It keeps its own copy of the catalog but stops syncing with this PC.`)) return;
+    setError(''); setMsg('');
+    try { await api('POST', `/api/devices/${dev.id}/unlink`); await load(); } catch (e) { setError(e.message); }
+  }
+  const left = pair ? Math.max(0, Math.round((pair.expiresAt - now) / 1000)) : 0;
+  return html`<${Card} id="h-devices" title="Phone and helper PCs" help=${HELP.devices}>
+    <div class="stack">
+      ${d && d.devices.length ? html`<div class="stack-sm">${d.devices.map((dev) => html`<div class="row row-flat">
+          <span class="tile tile-accent"><${Icon} name=${dev.role === 'helper' ? 'laptop' : 'phone'} size=${18} /></span>
+          <div class="grow"><div class="row-title">${dev.name}</div><div class="small muted">${dev.last_sync_at ? `Last synced ${timeAgo(dev.last_sync_at)}` : 'Not synced yet'}</div></div>
+          <${Button} kind="danger" onClick=${() => unlink(dev)}>Unlink</${Button}>
+        </div>`)}</div>` : html`<p class="small muted mt0">No phone linked yet. Install DriveAtlas on your Android phone, then link it here to keep both in sync on your Wi-Fi.</p>`}
+      ${pair ? html`<div class="link-code" role="status">
+          <div class="small muted">On your phone, open DriveAtlas, choose Link with a PC, and type:</div>
+          <div class="kv"><dt>PC address</dt><dd class="mono big">${pair.address}</dd><dt>Link code</dt><dd class="mono big">${pair.code}</dd></div>
+          <div class="small muted">Valid for ${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')}. Windows may ask whether DriveAtlas (Node.js) may use private networks: choose Allow.</div>
+        </div>`
+        : html`<div><${Button} kind="primary" icon="phone" onClick=${start}>Link a phone</${Button}></div>`}
+      ${msg ? html`<p class="small" role="status">${msg}</p>` : null}
+      <${ErrorNote} error=${error} />
+    </div>
+  </${Card}>`;
 }
 
 // Stops the hub after a confirm step. Open windows switch to the "stopped" screen.

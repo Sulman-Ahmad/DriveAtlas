@@ -198,7 +198,7 @@ export function finishScan(db, scanId, totals, keep = 3) {
   try {
     db.prepare('INSERT INTO entries_fts(rowid, name) SELECT id, name FROM entries WHERE scan_id = ? AND eid > 0').run(scanId);
     db.prepare('UPDATE scans SET is_current = 0 WHERE drive_id = ? AND partition_idx IS ? AND id != ?').run(scan.drive_id, scan.partition_idx, scanId);
-    db.prepare(`UPDATE scans SET status = 'done', is_current = 1, finished_at = ?, file_count = ?, folder_count = ?, total_bytes = ?, skipped = ?
+    db.prepare(`UPDATE scans SET status = 'done', is_current = 1, indexed = 1, finished_at = ?, file_count = ?, folder_count = ?, total_bytes = ?, skipped = ?
       WHERE id = ?`).run(Date.now(), totals.files, totals.folders, totals.bytes, totals.skipped, scanId);
     db.prepare('UPDATE drives SET last_scanned_at = ? WHERE id = ?').run(Date.now(), scan.drive_id);
     const old = db.prepare(`SELECT id FROM scans WHERE drive_id = ? AND partition_idx IS ? AND status = 'done'
@@ -211,8 +211,8 @@ export function finishScan(db, scanId, totals, keep = 3) {
 // Removes a scan and its entries, keeping the search index in step. Only finished
 // scans were added to the search index, so only those are removed from it.
 export function deleteScanData(db, scanId) {
-  const scan = db.prepare('SELECT status FROM scans WHERE id = ?').get(scanId);
-  if (scan && scan.status === 'done') {
+  const scan = db.prepare('SELECT indexed FROM scans WHERE id = ?').get(scanId);
+  if (scan && scan.indexed) {
     db.prepare(`INSERT INTO entries_fts(entries_fts, rowid, name) SELECT 'delete', id, name FROM entries WHERE scan_id = ? AND eid > 0`).run(scanId);
   }
   db.prepare('DELETE FROM entries WHERE scan_id = ?').run(scanId);

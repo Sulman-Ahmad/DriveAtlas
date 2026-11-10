@@ -35,6 +35,8 @@
 !/mobile/package.json
 !/mobile/capacitor.config.json
 !/mobile/build-www.mjs
+!/mobile/native/
+!/mobile/assets/
 
 # 5. Never publish these, even inside the folders above.
 *.md

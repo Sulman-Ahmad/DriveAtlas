@@ -1,5 +1,5 @@
 // Details of one file or folder, used by Search and Files.
-import { html, useState, useEffect, api } from '../lib.js';
+import { html, useState, useEffect, api, isLocalBackend } from '../lib.js';
 import { Icon, Button, StatusPill, ErrorNote, HelpTip } from '../components.js';
 import { HELP } from '../help.js';
 import { kindName, kindIcon } from '/shared/kinds.js';
@@ -59,7 +59,7 @@ export function FileDetail({ entryId, data, showFolderLink = true }) {
       ${note ? html`<p class="small muted break">${note}</p>` : null}
       <div class="actions">
         <${Button} icon="copy" onClick=${copyPath}>Copy path</${Button}>
-        ${drive?.connected ? html`<${Button} kind="primary" icon="external" onClick=${open}>Open in Explorer</${Button}>` : null}
+        ${drive?.connected && !isLocalBackend() ? html`<${Button} kind="primary" icon="external" onClick=${open}>Open in Explorer</${Button}>` : null}
         ${showFolderLink ? html`<a class="btn btn-secondary" href=${folderHref}><${Icon} name="folder" size=${17} />Show in folder</a>` : null}
       </div>
     </div>

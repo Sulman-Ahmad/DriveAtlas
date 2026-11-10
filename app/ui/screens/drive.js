@@ -1,5 +1,6 @@
 // Drive page: details, partitions, changes to review, edit and delete.
-import { html, useState, useEffect, api, go } from '../lib.js';
+import { html, useState, useEffect, api, go, isLocalBackend } from '../lib.js';
+import { startScan } from '../scan-start.js';
 import { Icon, Card, TypeTile, StatusPill, HealthPill, BootPill, CapacityBar, UsageLine, Button, Pill, ErrorNote, NO_HEALTH_TYPES, HelpTip } from '../components.js';
 import { HELP } from '../help.js';
 import { DriveForm } from './drive-form.js';
@@ -38,7 +39,7 @@ export function DrivePage({ id, data, onChanged }) {
   async function scanNow() {
     setBusy(true);
     setError('');
-    try { await api('POST', `/api/drives/${id}/scan`, {}); go('#/scan'); } catch (err) { setError(err.message); setBusy(false); }
+    try { await startScan(id); go('#/scan'); } catch (err) { setError(err.message); setBusy(false); }
   }
 
   async function remove() {
@@ -177,6 +178,7 @@ function HealthSection({ d, history, onRead }) {
   const [msg, setMsg] = useState('');
   const last = history[0];
   const flash = NO_HEALTH_TYPES.includes(d.type);
+  const onPhone = isLocalBackend();
 
   async function read() {
     setBusy(true);
@@ -201,11 +203,14 @@ function HealthSection({ d, history, onRead }) {
         ${stat('Pending sectors', last.pending)}
         ${stat('Media errors', last.media_errors)}
       </div>
-    </div>` : html`<p class="small muted mt0">${flash
+    </div>` : html`<p class="small muted mt0">${d.type === 'phone'
+      ? 'Phones do not share their storage health with apps. DriveAtlas shows the phone’s space and file list instead.'
+      : flash
       ? 'USB sticks and memory cards do not report health. DriveAtlas shows their age and last scan instead.'
+      : onPhone ? 'Drive health is read on a PC. Link a PC in Settings and plug the drive in there; the reading then syncs to this phone.'
       : d.connected ? 'Not read yet. Reading health needs Windows permission: a prompt appears and you choose Yes. Nothing on the drive is changed.' : 'Not read yet. Plug the drive in to read its health.'}</p>`}
     ${msg ? html`<p class="small muted" role="status">${msg}</p>` : null}
-    ${d.connected && !flash ? html`<div class="mt6"><${Button} icon="pulse" disabled=${busy} onClick=${read}>${busy ? 'Reading…' : 'Read health now'}</${Button}></div>` : null}
+    ${d.connected && !flash && !onPhone ? html`<div class="mt6"><${Button} icon="pulse" disabled=${busy} onClick=${read}>${busy ? 'Reading…' : 'Read health now'}</${Button}></div>` : null}
   </${Card}>`;
 }
 

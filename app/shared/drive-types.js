@@ -16,6 +16,7 @@ export const DRIVE_TYPES = [
   { id: 'u2', name: 'U.2 / PCIe card', icon: 'ssd', hint: 'Desktop and server NVMe', internal: true },
   { id: 'portable', name: 'Portable SSD', icon: 'portable', hint: 'USB-C · Thunderbolt' },
   { id: 'enclosure', name: 'Enclosure or dock', icon: 'enclosure', hint: 'Holds another drive' },
+  { id: 'phone', name: 'Phone or tablet', icon: 'phone', hint: 'Its own storage and SD card' },
   { id: 'other', name: 'Other', icon: 'disc', hint: 'Optical, tape, legacy cards' }
 ];
 
@@ -47,6 +48,7 @@ const READER = /generic|storage device|card ?reader|multi.?card|sd\/mmc/i;
 // Best guess of the drive type for a disk Windows reports. You can always change it.
 export function guessType(disk) {
   const name = `${disk.friendlyName || ''} ${disk.model || ''}`;
+  if (disk.busType === 'Phone') return 'phone';
   if (disk.busType === 'NVMe') return 'nvme';
   if (disk.busType === 'SD' || disk.busType === 'MMC') return 'sd';
   if (disk.internal) return disk.mediaType === 'HDD' ? 'hdd25' : 'sata-ssd';
@@ -54,6 +56,8 @@ export function guessType(disk) {
     if (READER.test(name)) return 'sd';
     if (disk.mediaType === 'HDD') return 'hddext';
     if (disk.mediaType === 'SSD') return /\bT[579]\b|portable|extreme|ssd/i.test(name) ? 'portable' : 'enclosure';
+    // Drives seen by a phone report no media type; an SSD usually says so in its name.
+    if (!disk.mediaType && /\bT[579]\b|\bssd\b|portable/i.test(name)) return 'portable';
     return 'usb';
   }
   return 'other';
