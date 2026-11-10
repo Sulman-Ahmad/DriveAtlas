@@ -1,17 +1,19 @@
-name: Android APK
+name: Build and release
 
-# Builds the Android app whenever the shared interface or the Android app changes.
-# With the signing key set up (repository secrets ANDROID_KEYSTORE_BASE64 and ANDROID_KEYSTORE_PASSWORD),
-# each build is signed with the same key and published to GitHub Releases as a test build, so a new
-# version installs over the old one and the phone keeps its catalog. Without the key, the APK is only
-# kept as a run artifact (signed with a throwaway key, so it cannot update an installed app).
+# Builds the Android app on every change, signed with the same key each time (repository secrets
+# ANDROID_KEYSTORE_BASE64 and ANDROID_KEYSTORE_PASSWORD), so a new version installs over the old one and the
+# phone keeps its catalog. Every build is kept as a download on the run's page.
+# When the version in app/package.json and mobile/package.json has no release yet (for example 0.4.0-beta.1),
+# the build is published to GitHub Releases as "v<version>" with the APK and a Windows zip; versions with a
+# dash (beta) are marked as pre-releases.
 on:
   push:
     branches: [main]
     paths:
-      - 'app/ui/**'
-      - 'app/shared/**'
+      - 'app/**'
       - 'mobile/**'
+      - 'DriveAtlas.vbs'
+      - 'DriveAtlas.cmd'
       - '.github/workflows/android.yml'
   workflow_dispatch:
 
@@ -27,11 +29,11 @@ env:
     -Dorg.gradle.internal.repository.initial.backoff=2000
 
 concurrency:
-  group: android-${{ github.ref }}
+  group: build-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  apk:
+  build:
     runs-on: ubuntu-latest
     timeout-minutes: 40
     env:
@@ -47,6 +49,24 @@ jobs:
         with:
           distribution: temurin
           java-version: 21
+
+      - name: Work out the version, and whether this build becomes a release
+        run: |
+          set -euo pipefail
+          VERSION="$(node -p "require('./mobile/package.json').version")"
+          APP_VERSION="$(node -p "require('./app/package.json').version")"
+          if [ "$VERSION" != "$APP_VERSION" ]; then echo "::error::app/package.json ($APP_VERSION) and mobile/package.json ($VERSION) must have the same version"; exit 1; fi
+          TAG="v${VERSION}"
+          if git ls-remote --exit-code --tags origin "refs/tags/${TAG}" >/dev/null 2>&1; then
+            RELEASE=false; VERSION_NAME="${VERSION}-build.${GITHUB_RUN_NUMBER}"
+          else
+            RELEASE=true; VERSION_NAME="${VERSION}"
+          fi
+          echo "VERSION=${VERSION}" >> "$GITHUB_ENV"
+          echo "TAG=${TAG}" >> "$GITHUB_ENV"
+          echo "RELEASE=${RELEASE}" >> "$GITHUB_ENV"
+          echo "VERSION_NAME=${VERSION_NAME}" >> "$GITHUB_ENV"
+          echo "Version ${VERSION_NAME}; release: ${RELEASE}"
 
       - name: Install Capacitor
         working-directory: mobile
@@ -67,11 +87,9 @@ jobs:
       - name: Set the version
         working-directory: mobile/android/app
         run: |
-          VERSION_NAME="$(node -p "require('../../package.json').version")-test.${GITHUB_RUN_NUMBER}"
           sed -i -E "s/versionCode [0-9]+/versionCode ${GITHUB_RUN_NUMBER}/" build.gradle
           sed -i -E "s/versionName \"[^\"]*\"/versionName \"${VERSION_NAME}\"/" build.gradle
           grep -E "versionCode|versionName" build.gradle
-          echo "VERSION_NAME=${VERSION_NAME}" >> "$GITHUB_ENV"
 
       - name: Build the release APK
         if: env.HAS_KEY == 'true'
@@ -110,23 +128,36 @@ jobs:
           mkdir -p ../../dist
           cp app/build/outputs/apk/debug/app-debug.apk "../../dist/DriveAtlas-${VERSION_NAME}-unsigned-test.apk"
 
+      - name: Pack the Windows app
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          git archive --format=zip --prefix=DriveAtlas/ -o "dist/DriveAtlas-Windows-${VERSION_NAME}.zip" HEAD DriveAtlas.vbs DriveAtlas.cmd app README.md LICENSE.md
+          unzip -l "dist/DriveAtlas-Windows-${VERSION_NAME}.zip" | tail -1
+
       - uses: actions/upload-artifact@v4
         with:
-          name: DriveAtlas-apk
-          path: dist/*.apk
+          name: DriveAtlas-${{ env.VERSION_NAME }}
+          path: dist/*
           retention-days: 30
           if-no-files-found: error
 
-      - name: Publish to GitHub Releases
-        if: env.HAS_KEY == 'true'
+      - name: Publish the release
+        if: env.HAS_KEY == 'true' && env.RELEASE == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          TAG="test-${GITHUB_RUN_NUMBER}"
-          gh release create "$TAG" dist/*.apk --target "$GITHUB_SHA" --prerelease \
-            --title "DriveAtlas ${VERSION_NAME}" \
-            --notes "Test build ${GITHUB_RUN_NUMBER} from ${GITHUB_SHA::7}. Download the APK on your phone and open it to install or update (allow \"Install unknown apps\" once)."
-          # Keep the newest 5 test builds.
-          gh release list --limit 100 --json tagName,isPrerelease --jq '.[] | select(.isPrerelease) | .tagName' \
-            | grep '^test-' | tail -n +6 | while read -r old; do gh release delete "$old" --yes --cleanup-tag; done
+          TITLE="DriveAtlas $(node -p "process.env.VERSION.replace(/-beta\.(\d+)$/, ' beta \$1').replace(/-rc\.(\d+)$/, ' release candidate \$1')")"
+          PRE=""
+          case "$VERSION" in *-*) PRE="--prerelease" ;; esac
+          {
+            git log -1 --format=%B "$GITHUB_SHA"
+            echo
+            echo "## Install"
+            echo
+            echo "- **Android:** download \`DriveAtlas-${VERSION}.apk\` on your phone and open it (allow \"Install unknown apps\" once). It installs over an earlier version and keeps your catalog."
+            echo "- **Windows:** download \`DriveAtlas-Windows-${VERSION}.zip\`, unzip it, and double-click \`DriveAtlas.vbs\`. Needs Node.js 22.13 or newer from nodejs.org. Your catalog stays where it is."
+            echo "- Use the same version on your PC and phone to sync."
+          } > "$RUNNER_TEMP/notes.md"
+          gh release create "$TAG" dist/*.apk dist/*.zip --target "$GITHUB_SHA" $PRE --title "$TITLE" --notes-file "$RUNNER_TEMP/notes.md"

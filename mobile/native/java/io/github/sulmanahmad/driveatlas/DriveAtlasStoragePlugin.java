@@ -109,6 +109,9 @@ public class DriveAtlasStoragePlugin extends Plugin {
         }
         worker.shutdownNow();
         io.shutdown();
+        refreshCancelled.set(true);
+        stopObservers();
+        refresher.shutdownNow();
     }
 
     // ---------- Phone and volumes ----------
@@ -449,6 +452,29 @@ public class DriveAtlasStoragePlugin extends Plugin {
         return fallback;
     }
 
+    // ---------- Scanning the PC's QR code (linking) ----------
+    // A scanner screen built into the app (ZXing); it asks for the camera the first time and works without Google services.
+
+    @PluginMethod
+    public void scanQr(PluginCall call) {
+        com.journeyapps.barcodescanner.ScanOptions o = new com.journeyapps.barcodescanner.ScanOptions();
+        o.setDesiredBarcodeFormats(com.journeyapps.barcodescanner.ScanOptions.QR_CODE);
+        o.setPrompt(call.getString("prompt", "Point the camera at the QR code on your PC"));
+        o.setBeepEnabled(false);
+        o.setOrientationLocked(false);
+        Intent intent = new com.journeyapps.barcodescanner.ScanContract().createIntent(getContext(), o);
+        startActivityForResult(call, intent, "scanQrResult");
+    }
+
+    @ActivityCallback
+    private void scanQrResult(PluginCall call, ActivityResult result) {
+        if (call == null) return;
+        com.journeyapps.barcodescanner.ScanIntentResult r = com.journeyapps.barcodescanner.ScanIntentResult.parseActivityResult(result.getResultCode(), result.getData());
+        JSObject out = new JSObject();
+        if (r != null && r.getContents() != null) out.put("text", r.getContents()); else out.put("cancelled", true);
+        call.resolve(out);
+    }
+
     // ---------- Fingerprint ----------
 
     private static final int AUTHENTICATORS = BiometricManager.Authenticators.BIOMETRIC_STRONG | BiometricManager.Authenticators.BIOMETRIC_WEAK;
@@ -528,7 +554,7 @@ public class DriveAtlasStoragePlugin extends Plugin {
         cancelled.set(false);
         paused.set(false);
         worker.execute(() -> {
-            Walk w = new Walk(scanId, wantHidden, wantMedia, wantFingerprint, exclude);
+            Walk w = new Walk(scanId, wantHidden, wantMedia, wantFingerprint, exclude, "scanBatch", cancelled, paused, 0);
             try {
                 if (uri != null) w.walkTree(Uri.parse(uri)); else w.walkFiles(new File(path));
                 w.flush(true);
@@ -555,6 +581,10 @@ public class DriveAtlasStoragePlugin extends Plugin {
         final boolean wantMedia;
         final boolean wantFingerprint;
         final Set<String> exclude;
+        final String event;
+        final AtomicBoolean cancelled;
+        final AtomicBoolean paused;
+        final int maxDepth;
         int nextEid = 0;
         long files = 0;
         long folders = 0;
@@ -564,12 +594,17 @@ public class DriveAtlasStoragePlugin extends Plugin {
         long lastSend = System.currentTimeMillis();
         String current = "";
 
-        Walk(String scanId, boolean wantHidden, boolean wantMedia, boolean wantFingerprint, Set<String> exclude) {
+        Walk(String scanId, boolean wantHidden, boolean wantMedia, boolean wantFingerprint, Set<String> exclude, String event,
+             AtomicBoolean cancelled, AtomicBoolean paused, int maxDepth) {
             this.scanId = scanId;
             this.wantHidden = wantHidden;
             this.wantMedia = wantMedia;
             this.wantFingerprint = wantFingerprint;
             this.exclude = exclude;
+            this.event = event;
+            this.cancelled = cancelled;
+            this.paused = paused;
+            this.maxDepth = maxDepth;
         }
 
         void waitIfPaused() throws InterruptedException {
@@ -602,7 +637,7 @@ public class DriveAtlasStoragePlugin extends Plugin {
             m.put("scanId", scanId);
             m.put("entries", rows);
             m.put("current", current);
-            notifyListeners("scanBatch", m);
+            notifyListeners(event, m);
             rows = new JSArray();
             lastSend = now;
         }
@@ -614,13 +649,14 @@ public class DriveAtlasStoragePlugin extends Plugin {
         // ----- Plain files (with All files access) -----
         void walkFiles(File root) throws Exception {
             ArrayDeque<Object[]> stack = new ArrayDeque<>();
-            stack.push(new Object[] { root, 0 });
+            stack.push(new Object[] { root, 0, 1 });
             while (!stack.isEmpty()) {
                 if (cancelled.get()) return;
                 waitIfPaused();
                 Object[] top = stack.pop();
                 File dir = (File) top[0];
                 int dirEid = (Integer) top[1];
+                int depth = (Integer) top[2];
                 current = dir.getAbsolutePath();
                 File[] children = dir.listFiles();
                 if (children == null) { skipped++; continue; }
@@ -638,35 +674,11 @@ public class DriveAtlasStoragePlugin extends Plugin {
                         }
                         boolean readable = f.canRead();
                         add(eid, dirEid, name, true, 0, f.lastModified(), readable ? flags : flags | FLAG_DENIED, null, null, null, null, null);
-                        if (readable) stack.push(new Object[] { f, eid });
+                        if (readable && (maxDepth <= 0 || depth < maxDepth)) stack.push(new Object[] { f, eid, depth + 1 });
                     } else {
                         long size = f.length();
-                        String ext = ext(name);
-                        String fp = null;
-                        Integer w = null, h = null;
-                        Double dur = null;
-                        Long taken = null;
-                        if (wantFingerprint && size > 0) fp = fingerprint(f, size);
-                        if (wantMedia && IMAGE_EXTS.contains(ext)) {
-                            BitmapFactory.Options o = new BitmapFactory.Options();
-                            o.inJustDecodeBounds = true;
-                            BitmapFactory.decodeFile(f.getAbsolutePath(), o);
-                            if (o.outWidth > 0) { w = o.outWidth; h = o.outHeight; }
-                            if (ext.equals("jpg") || ext.equals("jpeg") || ext.equals("webp")) taken = exifTaken(f);
-                        } else if (wantMedia && VIDEO_EXTS.contains(ext)) {
-                            MediaMetadataRetriever mr = new MediaMetadataRetriever();
-                            try {
-                                mr.setDataSource(f.getAbsolutePath());
-                                w = parseInt(mr.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH));
-                                h = parseInt(mr.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT));
-                                Integer ms = parseInt(mr.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION));
-                                if (ms != null) dur = ms / 1000.0;
-                            } catch (Exception ignored) {
-                            } finally {
-                                try { mr.release(); } catch (Exception ignored) { }
-                            }
-                        }
-                        add(eid, dirEid, name, false, size, f.lastModified(), flags, fp, w, h, dur, taken);
+                        Object[] d = details(f, size, wantFingerprint, wantMedia);
+                        add(eid, dirEid, name, false, size, f.lastModified(), flags, (String) d[0], (Integer) d[1], (Integer) d[2], (Double) d[3], (Long) d[4]);
                     }
                     flush(false);
                 }
@@ -720,6 +732,189 @@ public class DriveAtlasStoragePlugin extends Plugin {
                 }
             }
         }
+    }
+
+    /** Fingerprint, picture or video size, video length and date taken: { fp, width, height, duration, taken }. */
+    private Object[] details(File f, long size, boolean wantFingerprint, boolean wantMedia) {
+        String ext = ext(f.getName());
+        String fp = null;
+        Integer w = null, h = null;
+        Double dur = null;
+        Long taken = null;
+        if (wantFingerprint && size > 0) fp = fingerprint(f, size);
+        if (wantMedia && IMAGE_EXTS.contains(ext)) {
+            BitmapFactory.Options o = new BitmapFactory.Options();
+            o.inJustDecodeBounds = true;
+            BitmapFactory.decodeFile(f.getAbsolutePath(), o);
+            if (o.outWidth > 0) { w = o.outWidth; h = o.outHeight; }
+            if (ext.equals("jpg") || ext.equals("jpeg") || ext.equals("webp")) taken = exifTaken(f);
+        } else if (wantMedia && VIDEO_EXTS.contains(ext)) {
+            MediaMetadataRetriever mr = new MediaMetadataRetriever();
+            try {
+                mr.setDataSource(f.getAbsolutePath());
+                w = parseInt(mr.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH));
+                h = parseInt(mr.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT));
+                Integer ms = parseInt(mr.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION));
+                if (ms != null) dur = ms / 1000.0;
+            } catch (Exception ignored) {
+            } finally {
+                try { mr.release(); } catch (Exception ignored) { }
+            }
+        }
+        return new Object[] { fp, w, h, dur, taken };
+    }
+
+    // ---------- Keeping file lists up to date ----------
+    // Catch-up walks and folder listings run on their own thread with their own stop switch, so they never wait
+    // for, or stop, a scan you started. Folder watching runs only while the app is open.
+
+    private final ExecutorService refresher = Executors.newSingleThreadExecutor();
+    private final AtomicBoolean refreshCancelled = new AtomicBoolean(false);
+    private final AtomicBoolean refreshPaused = new AtomicBoolean(false);
+
+    /** Walks a folder without opening files (names, sizes, dates); maxDepth 1 lists one folder only. Sends "walkBatch". */
+    @PluginMethod
+    public void walk(PluginCall call) {
+        final String walkId = call.getString("walkId");
+        final String path = call.getString("path");
+        final int maxDepth = call.getInt("maxDepth", 0);
+        JSObject opts = call.getObject("options", new JSObject());
+        final boolean wantHidden = opts.optBoolean("hidden", true);
+        final Set<String> exclude = new HashSet<>();
+        JSONArray ex = opts.optJSONArray("exclude");
+        if (ex != null) for (int i = 0; i < ex.length(); i++) exclude.add(ex.optString(i, "").toLowerCase(Locale.ROOT));
+        if (walkId == null || path == null) { call.reject("Nothing to walk."); return; }
+        refreshCancelled.set(false);
+        refresher.execute(() -> {
+            Walk w = new Walk(walkId, wantHidden, false, false, exclude, "walkBatch", refreshCancelled, refreshPaused, maxDepth);
+            try {
+                File root = new File(path);
+                if (!root.isDirectory()) { JSObject r = new JSObject(); r.put("gone", true); call.resolve(r); return; }
+                w.walkFiles(root);
+                w.flush(true);
+                JSObject r = new JSObject();
+                r.put("files", w.files);
+                r.put("folders", w.folders);
+                r.put("cancelled", refreshCancelled.get());
+                call.resolve(r);
+            } catch (Exception e) {
+                JSObject r = new JSObject();
+                r.put("error", e.getMessage() == null ? e.toString() : e.getMessage());
+                call.resolve(r);
+            }
+        });
+    }
+
+    @PluginMethod
+    public void stopWalks(PluginCall call) { refreshCancelled.set(true); call.resolve(); }
+
+    /** Fingerprints and photo/video details for files that are new or changed: { items: [[fp, w, h, duration, taken] or null] }. */
+    @PluginMethod
+    public void fileDetails(PluginCall call) {
+        final JSArray paths = call.getArray("paths", new JSArray());
+        final boolean wantFingerprint = Boolean.TRUE.equals(call.getBoolean("fingerprint", true));
+        final boolean wantMedia = Boolean.TRUE.equals(call.getBoolean("media", true));
+        refresher.execute(() -> {
+            JSArray items = new JSArray();
+            for (int i = 0; i < paths.length(); i++) {
+                String p = paths.optString(i, null);
+                File f = p == null ? null : new File(p);
+                if (f == null || !f.isFile()) { items.put(JSONObject.NULL); continue; }
+                Object[] d = details(f, f.length(), wantFingerprint, wantMedia);
+                JSArray row = new JSArray();
+                for (Object o : d) row.put(o == null ? JSONObject.NULL : o);
+                items.put(row);
+            }
+            JSObject r = new JSObject();
+            r.put("items", items);
+            call.resolve(r);
+        });
+    }
+
+    private static final int WATCH_MASK = android.os.FileObserver.CREATE | android.os.FileObserver.DELETE | android.os.FileObserver.MOVED_FROM
+        | android.os.FileObserver.MOVED_TO | android.os.FileObserver.CLOSE_WRITE | android.os.FileObserver.DELETE_SELF | android.os.FileObserver.MOVE_SELF;
+    private final java.util.Map<String, android.os.FileObserver> observers = new java.util.HashMap<>();
+    private final Set<String> changedDirs = new HashSet<>();
+    private final android.os.Handler mainHandler = new android.os.Handler(android.os.Looper.getMainLooper());
+    private volatile int watchLimit = 4000;
+    private final Runnable flushChanges = () -> {
+        JSArray paths = new JSArray();
+        synchronized (changedDirs) { for (String d : changedDirs) paths.put(d); changedDirs.clear(); }
+        if (paths.length() == 0) return;
+        JSObject m = new JSObject();
+        m.put("paths", paths);
+        notifyListeners("foldersChanged", m);
+    };
+
+    @SuppressWarnings("deprecation")
+    private void observe(File dir) {
+        final String p = dir.getAbsolutePath();
+        synchronized (observers) {
+            if (observers.containsKey(p) || observers.size() >= watchLimit) return;
+            android.os.FileObserver o = new android.os.FileObserver(p, WATCH_MASK) {
+                @Override
+                public void onEvent(int event, String name) {
+                    int e = event & android.os.FileObserver.ALL_EVENTS;
+                    if (e == 0) return;
+                    synchronized (changedDirs) { changedDirs.add(p); }
+                    if ((e & (android.os.FileObserver.CREATE | android.os.FileObserver.MOVED_TO)) != 0 && name != null && !name.startsWith(".")) {
+                        final File child = new File(p, name);
+                        if (child.isDirectory()) refresher.execute(() -> observeTree(child));
+                    }
+                    mainHandler.removeCallbacks(flushChanges);
+                    mainHandler.postDelayed(flushChanges, 2000);
+                }
+            };
+            o.startWatching();
+            observers.put(p, o);
+        }
+    }
+
+    private void observeTree(File root) {
+        ArrayDeque<File> queue = new ArrayDeque<>();
+        queue.add(root);
+        while (!queue.isEmpty()) {
+            synchronized (observers) { if (observers.size() >= watchLimit) return; }
+            File dir = queue.poll();
+            observe(dir);
+            File[] kids = dir.listFiles();
+            if (kids == null) continue;
+            for (File k : kids) {
+                String n = k.getName();
+                // Android/data and Android/obb belong to other apps and cannot be read anyway.
+                if (k.isDirectory() && !n.startsWith(".") && !isLink(k) && !(dir.equals(root) && n.equals("Android"))) queue.add(k);
+            }
+        }
+    }
+
+    /** Watches folders (breadth first, up to maxFolders) while the app is open; sends "foldersChanged" with folder paths. */
+    @PluginMethod
+    public void watchFolders(PluginCall call) {
+        final JSArray roots = call.getArray("roots", new JSArray());
+        Integer max = call.getInt("maxFolders", 4000);
+        watchLimit = Math.max(100, Math.min(max == null ? 4000 : max, 8000));
+        refresher.execute(() -> {
+            stopObservers();
+            for (int i = 0; i < roots.length(); i++) {
+                String r = roots.optString(i, null);
+                if (r != null && new File(r).isDirectory()) observeTree(new File(r));
+            }
+            JSObject res = new JSObject();
+            synchronized (observers) { res.put("watched", observers.size()); res.put("limited", observers.size() >= watchLimit); }
+            call.resolve(res);
+        });
+    }
+
+    @PluginMethod
+    public void stopWatching(PluginCall call) { stopObservers(); call.resolve(); }
+
+    private void stopObservers() {
+        synchronized (observers) {
+            for (android.os.FileObserver o : observers.values()) { try { o.stopWatching(); } catch (Exception ignored) { } }
+            observers.clear();
+        }
+        mainHandler.removeCallbacks(flushChanges);
+        synchronized (changedDirs) { changedDirs.clear(); }
     }
 
     private static boolean isLink(File f) {

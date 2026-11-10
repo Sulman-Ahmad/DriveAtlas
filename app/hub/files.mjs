@@ -33,7 +33,7 @@ function pather(db) {
 const relPath = (chain) => '\\' + chain.map((c) => c.name).join('\\');
 
 export function currentScans(db, driveId) {
-  return db.prepare(`SELECT id, partition_idx, partition_label, root, finished_at, file_count, folder_count, total_bytes, skipped, options
+  return db.prepare(`SELECT id, partition_idx, partition_label, root, finished_at, updated_at, file_count, folder_count, total_bytes, skipped, options
     FROM scans WHERE drive_id = ? AND is_current = 1 ORDER BY partition_idx`).all(driveId)
     .map((s) => ({ ...s, options: JSON.parse(s.options || '{}') }));
 }

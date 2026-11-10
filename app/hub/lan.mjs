@@ -10,8 +10,8 @@ import { getSetting, setSetting, tx } from './db.mjs';
 import { httpError } from './auth.mjs';
 import { TEST_MODE } from './config.mjs';
 import {
-  SYNC_PORT, SYNC_VERSION, SYNC_TABLES, ENTRY_COLUMNS, ENTRY_CHUNK, codeFromBytes, normalizeCode, formatCode,
-  upsertStatement, deleteStatements, sortForApply
+  SYNC_PORT, SYNC_VERSION, SYNC_TABLES, ENTRY_COLUMNS, ENTRY_CHUNK, ENTRY_EDIT_CHUNK, codeFromBytes, normalizeCode, formatCode,
+  upsertStatement, deleteStatements, sortForApply, entryEditStatements
 } from '../shared/sync.js';
 
 const PAIR_MINUTES = 2;
@@ -36,6 +36,8 @@ export function homeAddresses() {
 }
 
 // ---- Envelope encryption (same format as ui/phone/crypto.js) ----
+// The envelope format has its own version, separate from the sync protocol version (SYNC_VERSION).
+const ENVELOPE_VERSION = 1;
 const aad = (device, op, ts, dir) => Buffer.from(`DA1|${device}|${op}|${ts}|${dir}`, 'utf8');
 
 export function seal(key, device, op, dir, obj) {
@@ -44,11 +46,11 @@ export function seal(key, device, op, dir, obj) {
   const c = crypto.createCipheriv('aes-256-gcm', key, iv);
   c.setAAD(aad(device, op, ts, dir));
   const data = Buffer.concat([c.update(JSON.stringify(obj), 'utf8'), c.final(), c.getAuthTag()]);
-  return { v: SYNC_VERSION, ts, iv: iv.toString('base64'), data: data.toString('base64') };
+  return { v: ENVELOPE_VERSION, ts, iv: iv.toString('base64'), data: data.toString('base64') };
 }
 
 export function open(key, device, op, dir, env) {
-  if (!env || env.v !== SYNC_VERSION || typeof env.iv !== 'string' || typeof env.data !== 'string' || !Number.isFinite(env.ts)) throw httpError(400, 'Bad message.');
+  if (!env || env.v !== ENVELOPE_VERSION || typeof env.iv !== 'string' || typeof env.data !== 'string' || !Number.isFinite(env.ts)) throw httpError(400, 'Bad message.');
   const iv = Buffer.from(env.iv, 'base64');
   const buf = Buffer.from(env.data, 'base64');
   if (iv.length !== 12 || buf.length < 17) throw httpError(400, 'Bad message.');
@@ -84,6 +86,12 @@ export function createLan({ db, onChange = () => {} }) {
   };
   const account = () => db.prepare('SELECT account_id AS id, name FROM owner WHERE id = 1').get() || null;
   const maxSeq = (exceptDevice = null) => db.prepare('SELECT COALESCE(MAX(seq), 0) AS n FROM change_log WHERE device_id IS NULL OR device_id != ?').get(exceptDevice ?? '').n;
+  const maxEditSeq = (exceptDevice = null) => db.prepare('SELECT COALESCE(MAX(seq), 0) AS n FROM entry_log WHERE device_id IS NULL OR device_id != ?').get(exceptDevice ?? '').n;
+  // Changed entries are kept for 60 days; a device that has been away longer gets whole file lists again.
+  {
+    const old = db.prepare('SELECT MAX(seq) AS s FROM entry_log WHERE changed_at < ?').get(Date.now() - 60 * 86400000).s;
+    if (old) { db.prepare('DELETE FROM entry_log WHERE seq <= ?').run(old); setSetting(db, 'entryLogFloor', old); }
+  }
   const activeDevices = () => db.prepare('SELECT COUNT(*) AS n FROM linked_devices WHERE revoked_at IS NULL AND device_key IS NOT NULL').get().n;
 
   function prune() {
@@ -219,7 +227,8 @@ export function createLan({ db, onChange = () => {} }) {
           crypto.createHash('sha256').update(deviceKey).digest('hex'), deviceKey.toString('base64'), t, t);
       onChange('devices');
       return seal(key, deviceId, 'pair', 'res', {
-        deviceKey: deviceKey.toString('base64'), hubId: hubId(), hubName: cleanText(os.hostname(), 60) || 'PC', account: account(), seq: maxSeq(deviceId)
+        deviceKey: deviceKey.toString('base64'), hubId: hubId(), hubName: cleanText(os.hostname(), 60) || 'PC', account: account(), seq: maxSeq(deviceId),
+        editSeq: maxEditSeq(deviceId), version: SYNC_VERSION
       });
     }
     for (const p of pairings.values()) if ((p.failures += 1) >= 10) p.expires = 0;
@@ -228,11 +237,13 @@ export function createLan({ db, onChange = () => {} }) {
 
   // ---- Sync operations ----
   async function dispatch(op, body, deviceId) {
-    if (op === 'hello') return { hubId: hubId(), hubName: cleanText(os.hostname(), 60) || 'PC', account: account(), seq: maxSeq(deviceId) };
+    if (op === 'hello') return { hubId: hubId(), hubName: cleanText(os.hostname(), 60) || 'PC', account: account(), seq: maxSeq(deviceId), editSeq: maxEditSeq(deviceId), version: SYNC_VERSION };
     if (op === 'pull') return pull(Number(body.since) || 0, Math.min(Number(body.limit) || 500, 2000), deviceId);
     if (op === 'push') return push(Array.isArray(body.changes) ? body.changes : [], deviceId);
     if (op === 'entries-get') return entriesGet(String(body.scanId || ''), Number(body.after ?? -1));
     if (op === 'entries-put') return entriesPut(String(body.scanId || ''), body.rows, body.done === true, deviceId);
+    if (op === 'edits-get') return editsGet(Number(body.since) || 0, Math.min(Number(body.limit) || ENTRY_EDIT_CHUNK, ENTRY_EDIT_CHUNK), deviceId);
+    if (op === 'edits-put') return editsPut(Array.isArray(body.edits) ? body.edits : [], deviceId);
     if (op === 'wait') return waitForChanges(Number(body.since) || 0, deviceId, Math.min(Math.max(Number(body.ms) || WAIT_MS, 1000), WAIT_MS));
     throw httpError(404, 'Unknown operation.');
   }
@@ -278,6 +289,37 @@ export function createLan({ db, onChange = () => {} }) {
     const rows = db.prepare(`SELECT ${ENTRY_COLUMNS.join(', ')} FROM entries WHERE scan_id = ? AND eid > ? ORDER BY eid LIMIT ?`)
       .all(scanId, after, ENTRY_CHUNK).map((r) => ENTRY_COLUMNS.map((c) => r[c]));
     return { rows, done: rows.length < ENTRY_CHUNK };
+  }
+
+  // Entries changed in place since `since` (live updates and catch-up scans), newest state of each.
+  function editsGet(since, limit, deviceId) {
+    const floor = Number(getSetting(db, 'entryLogFloor', 0)) || 0;
+    if (since < floor) return { edits: [], next: maxEditSeq(deviceId), more: false, reset: true };
+    const rows = db.prepare(`SELECT scan_id AS s, eid, MAX(seq) AS seq FROM entry_log WHERE seq > ? AND (device_id IS NULL OR device_id != ?)
+      GROUP BY scan_id, eid ORDER BY seq LIMIT ?`).all(since, deviceId, limit);
+    const get = db.prepare(`SELECT ${ENTRY_COLUMNS.join(', ')} FROM entries WHERE scan_id = ? AND eid = ?`);
+    const edits = rows.map((r) => { const e = get.get(r.s, r.eid); return [r.s, r.eid, e ? ENTRY_COLUMNS.map((c) => e[c]) : null]; });
+    return { edits, next: rows.length ? rows[rows.length - 1].seq : since, more: rows.length === limit };
+  }
+
+  // Entries a phone changed in place on its own scans.
+  function editsPut(edits, deviceId) {
+    if (edits.length > ENTRY_EDIT_CHUNK) throw httpError(413, 'Too many changes at once.');
+    const known = new Map();
+    const has = (s) => { if (!known.has(s)) known.set(s, Boolean(db.prepare("SELECT 1 FROM scans WHERE id = ? AND status = 'done'").get(s))); return known.get(s); };
+    let applied = 0;
+    tx(db, () => {
+      for (const e of edits) {
+        if (!Array.isArray(e) || typeof e[0] !== 'string' || e[0].length > 64 || !Number.isInteger(e[1]) || e[1] < 0) continue;
+        const row = e[2];
+        if (row !== null && (!Array.isArray(row) || row.length !== ENTRY_COLUMNS.length || row[0] !== e[1])) continue;
+        if (!has(e[0])) continue; // the scan itself has not arrived yet; its whole file list follows
+        for (const s of entryEditStatements(e[0], e[1], row, deviceId)) db.prepare(s.sql).run(...s.params);
+        applied += 1;
+      }
+    });
+    if (applied) onChange('catalog');
+    return { applied };
   }
 
   function entriesPut(scanId, rows, done, deviceId) {

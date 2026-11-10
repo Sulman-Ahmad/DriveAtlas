@@ -287,6 +287,22 @@ export const MIGRATIONS = [
   CREATE TRIGGER collections_log_delete AFTER DELETE ON collections BEGIN
     INSERT INTO change_log (table_name, row_id, changed_at, device_id, deleted) VALUES ('collections', OLD.id, CAST(strftime('%s','now') AS INTEGER) * 1000, (SELECT origin FROM sync_ctx WHERE id = 1), 1);
   END;
+  `,
+  // 5: file lists kept up to date in place (live watching and catch-up scans), with a log of the changed entries
+  // so linked devices receive only what changed instead of whole file lists
+  `
+  ALTER TABLE scans ADD COLUMN updated_at INTEGER;
+  CREATE TABLE entry_log (
+    seq INTEGER PRIMARY KEY AUTOINCREMENT,
+    scan_id TEXT NOT NULL,
+    eid INTEGER NOT NULL,
+    deleted INTEGER NOT NULL DEFAULT 0,
+    device_id TEXT,
+    changed_at INTEGER NOT NULL
+  );
+  CREATE INDEX entry_log_scan ON entry_log(scan_id, eid);
+  ALTER TABLE linked_devices ADD COLUMN sent_edit_seq INTEGER NOT NULL DEFAULT 0;
+  ALTER TABLE linked_devices ADD COLUMN received_edit_seq INTEGER NOT NULL DEFAULT 0;
   `
 ];
 

@@ -6,18 +6,19 @@ import { emit, openEvents } from './events.js';
 import { setPin, checkPin, checkNewPin, biometricStatus, unlockWithBiometric } from './lock.js';
 import { backupStatus, setBackupPassword, chooseFolder, updateBackupSettings, backupNow, autoBackupIfDue, pickRestoreFile, restorePicked } from './backups.js';
 import { scans, deleteScanStatements } from './scanner.js';
-import { link as linkPc, unlink as unlinkPc, syncNow, startSync, currentLink, syncState } from './sync.js';
-import { DRIVE_TYPES, STATUSES, typeById, guessType, BOOT_KINDS } from '/shared/drive-types.js';
+import { live } from './live.js';
+import { link as linkPc, linkFromQr, unlink as unlinkPc, syncNow, startSync, currentLink, syncState } from './sync.js';
+import { DRIVE_TYPES, STATUSES, typeById, guessType, BOOT_KINDS, brandFromModel } from '/shared/drive-types.js';
 import { advertisedFromSize } from '/shared/format.js';
 import { FLAG } from '/shared/kinds.js';
 
-export const VERSION = '0.3.0';
+export const VERSION = '0.4.0-beta.1';
 export { openEvents };
 
 const HIDDEN_MASK = FLAG.HIDDEN | FLAG.SYSTEM;
 const ENTRY_COLS = `e.id, e.scan_id, e.eid, e.parent_eid, e.name, e.is_dir, e.size, e.items, e.modified_at, e.created_at, e.ext, e.kind,
   e.flags, e.fingerprint, e.width, e.height, e.duration_s, e.taken_at`;
-const SCAN_DEFAULTS = { media: true, fingerprint: true, hidden: true, keepScans: 3, exclude: [] };
+const SCAN_DEFAULTS = { media: true, fingerprint: true, hidden: true, keepScans: 3, exclude: [], live: true };
 const EDITABLE = ['name', 'type', 'other_kind', 'form_factor', 'brand', 'model', 'serial', 'advertised_bytes', 'interface',
   'rated_read_mbs', 'rated_write_mbs', 'speed_class', 'status', 'location', 'lent_to', 'lent_since', 'due_back', 'colour',
   'tags', 'notes', 'purchase_price', 'purchase_date', 'shop', 'warranty_until', 'bootable_override'];
@@ -149,7 +150,7 @@ async function liveDrives(disks) {
 
 function suggestionFor(disk) {
   return {
-    type: guessType(disk), name: '', brand: disk.kind === 'phone' && disk.manufacturer ? disk.manufacturer[0].toUpperCase() + disk.manufacturer.slice(1) : '',
+    type: guessType(disk), name: '', brand: disk.kind === 'phone' && disk.manufacturer ? disk.manufacturer[0].toUpperCase() + disk.manufacturer.slice(1) : (brandFromModel(disk.model || disk.friendlyName) || ''),
     model: disk.model || disk.friendlyName || '', serial: '', advertised_bytes: advertisedFromSize(disk.size), actual_bytes: disk.size,
     status: 'stored', bus: disk.busType, media: disk.mediaType, partition_style: disk.partitionStyle, bootable_kind: 'none'
   };
@@ -248,7 +249,7 @@ async function refreshSeen(disks) {
 
 // ---------- Files ----------
 async function currentScans(driveId) {
-  return (await db.all(`SELECT id, partition_idx, partition_label, root, finished_at, file_count, folder_count, total_bytes, skipped, options
+  return (await db.all(`SELECT id, partition_idx, partition_label, root, finished_at, updated_at, file_count, folder_count, total_bytes, skipped, options
     FROM scans WHERE drive_id = ? AND is_current = 1 ORDER BY partition_idx`, [driveId])).map((s) => ({ ...s, options: JSON.parse(s.options || '{}') }));
 }
 
@@ -428,10 +429,11 @@ on('GET', '/api/settings/all', () => settingsAll());
 on('GET', '/api/settings/scan', () => scanDefaults());
 on('PUT', '/api/settings/scan', async (c) => {
   const next = await scanDefaults();
-  for (const k of ['media', 'fingerprint', 'hidden']) if (typeof c.body[k] === 'boolean') next[k] = c.body[k];
+  for (const k of ['media', 'fingerprint', 'hidden', 'live']) if (typeof c.body[k] === 'boolean') next[k] = c.body[k];
   if (Number.isInteger(c.body.keepScans) && c.body.keepScans >= 1 && c.body.keepScans <= 20) next.keepScans = c.body.keepScans;
   if (Array.isArray(c.body.exclude)) next.exclude = c.body.exclude.slice(0, 50).map((x) => text(x, 'Folder', 200)).filter(Boolean);
   await setSetting('scanDefaults', next);
+  live.start().catch(() => {});
   return next;
 });
 on('POST', '/api/phone/pin', async (c) => { await checkPin(String(c.body.current || '')); await setPin(c.body.next); return { ok: true }; });
@@ -442,7 +444,12 @@ on('PUT', '/api/phone/biometric', async (c) => {
   return { ok: true };
 });
 on('GET', '/api/phone/access', () => accessStatus());
-on('POST', '/api/phone/link', async (c) => linkPc({ address: c.body.address, code: c.body.code }));
+on('POST', '/api/phone/link', async (c) => (typeof c.body.qr === 'string' ? linkFromQr(c.body.qr) : linkPc({ address: c.body.address, code: c.body.code })));
+on('POST', '/api/phone/scan-qr', async () => {
+  const p = plugin();
+  if (!p || !p.scanQr) throw fail(409, 'Scanning a QR code needs the DriveAtlas app on Android.');
+  return p.scanQr({ prompt: 'Point the camera at the QR code on your PC' });
+});
 on('POST', '/api/phone/sync', async () => syncNow());
 on('POST', '/api/phone/unlink', async () => { await unlinkPc(); return { ok: true }; });
 on('POST', '/api/phone/access', async () => { const p = plugin(); if (!p) throw fail(409, 'Only in the Android app.'); return p.requestAllFilesAccess(); });
@@ -474,14 +481,20 @@ on('POST', '/api/connected/refresh', async () => {
   await refreshSeen(disks);
   return { ready: true, disks: await connectedView(disks) };
 });
-on('GET', '/api/drives', async () => ({ drives: await liveDrives(await readPhoneDisks()) }));
+on('GET', '/api/drives', async () => { const w = live.status().drives; return { drives: (await liveDrives(await readPhoneDisks())).map((d) => ({ ...d, watch: w[d.id] || null })) }; });
+on('GET', '/api/live', () => live.status());
+on('POST', '/api/drives/:id/catch-up', async (c) => {
+  if (!(await scanDefaults()).live) throw fail(409, 'Turn on “Keep file lists up to date” in Settings first.');
+  if (!(await live.catchUp(c.params.id))) throw fail(409, 'Scan this drive once on this phone with All files access; after that DriveAtlas keeps its file list up to date.');
+  return { ok: true };
+});
 on('POST', '/api/drives', async (c) => ({ __status: 201, drive: await createDrive(c.body) }));
 on('GET', '/api/drives/:id', async (c) => {
   const drive = await getDrive(c.params.id);
   if (!drive) throw fail(404, 'That drive is not in your catalog.');
   const live = (await liveDrives(await readPhoneDisks())).find((d) => d.id === drive.id) || {};
   const { connected, internal, letters, diskNumber, used, total, liveStatus, hasPendingChanges, files } = live;
-  return { drive: { ...drive, connected, internal, letters, diskNumber, used, total, liveStatus, hasPendingChanges, files }, disk: null };
+  return { drive: { ...drive, connected, internal, letters, diskNumber, used, total, liveStatus, hasPendingChanges, files, watch: live.status().drives[drive.id] || null }, disk: null };
 });
 on('PATCH', '/api/drives/:id', async (c) => ({ drive: await updateDrive(c.params.id, c.body) }));
 on('DELETE', '/api/drives/:id', async (c) => { await deleteDrive(c.params.id); return { ok: true }; });
@@ -553,12 +566,20 @@ export async function startPhone() {
   startSync();
   const p = plugin();
   let hiddenAt = 0;
+  // File lists stay up to date only while the app is on screen: a catch-up when it opens, live updates meanwhile.
+  live.isBusy = (driveId) => scans.active?.driveId === driveId || scans.queue.some((j) => j.driveId === driveId);
+  const startLive = () => { owner().then((o) => { if (o) live.start().catch(() => {}); }); };
   document.addEventListener('visibilitychange', () => {
-    if (document.hidden) hiddenAt = Date.now();
-    else if (hiddenAt && Date.now() - hiddenAt > 5 * 60000 && unlocked) { unlocked = false; emit('locked', {}); }
-    else if (unlocked) backupSoon();
+    if (document.hidden) { hiddenAt = Date.now(); live.stop().catch(() => {}); }
+    else {
+      if (hiddenAt && Date.now() - hiddenAt > 5 * 60000 && unlocked) { unlocked = false; emit('locked', {}); }
+      else if (unlocked) backupSoon();
+      startLive();
+    }
   });
+  openEvents().addEventListener('scan-finished', startLive);
   if (!p) return;
+  startLive();
   let known = new Set((await readPhoneDisks({ fresh: true })).map((d) => d.key));
   await p.addListener('volumesChanged', async () => {
     const disks = await readPhoneDisks({ fresh: true });
@@ -574,5 +595,6 @@ export async function startPhone() {
     for (const k of known) if (!keys.has(k)) emit('unplugged', { friendlyName: 'A drive' });
     known = keys;
     emit('disks', {});
+    startLive();
   });
 }

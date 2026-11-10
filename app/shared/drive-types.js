@@ -76,3 +76,27 @@ export function bootKindFrom(partitions, partitionStyle) {
   if (partitionStyle === 'MBR' && partitions.some((p) => p.isActive)) return 'legacy';
   return 'none';
 }
+
+// Brands recognised at the start of a model name, so a detected drive gets its brand filled in.
+const BRANDS = ['Samsung', 'Western Digital', 'WD', 'Seagate', 'Toshiba', 'Kingston', 'SanDisk', 'Crucial', 'Micron', 'SK hynix', 'Hynix',
+  'Intel', 'ADATA', 'XPG', 'Transcend', 'Lexar', 'PNY', 'Corsair', 'Sabrent', 'Silicon Power', 'Patriot', 'Verbatim', 'HP', 'Lenovo',
+  'Dell', 'Apple', 'Hitachi', 'HGST', 'LaCie', 'Maxtor', 'Netac', 'Teamgroup', 'Team', 'KIOXIA', 'Gigabyte', 'MSI', 'Phison', 'Sony',
+  'Panasonic', 'Integral', 'Fanxiang', 'Hikvision', 'Lacie', 'Buffalo', 'Plextor', 'Liteon', 'Lite-On', 'Mushkin', 'OCZ', 'Inland'];
+export function brandFromModel(model) {
+  const m = String(model || '').trim().replace(/_/g, ' ');
+  if (!m) return null;
+  const low = m.toLowerCase();
+  for (const b of BRANDS) {
+    const bl = b.toLowerCase();
+    if (low === bl || low.startsWith(`${bl} `) || low.startsWith(`${bl}-`)) return b === 'WD' ? 'Western Digital' : b === 'Hynix' ? 'SK hynix' : b;
+  }
+  return null;
+}
+
+// "Samsung" + "SAMSUNG MZVLB512" shows once, not twice; "" when neither is known.
+export function brandAndModel(d) {
+  const brand = String((d && d.brand) || '').trim();
+  const model = String((d && d.model) || '').trim();
+  if (brand && model.toLowerCase().includes(brand.toLowerCase())) return model;
+  return [brand, model].filter(Boolean).join(' · ');
+}

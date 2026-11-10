@@ -5,7 +5,7 @@ import { db } from './db.js';
 import { seal, open, importKey, pairKey } from './crypto.js';
 import { deviceId, phoneInfo } from './native.js';
 import { emit, openEvents } from './events.js';
-import { normalizeCode, parseAddress, upsertStatement, deleteStatements, sortForApply, ENTRY_COLUMNS, ENTRY_CHUNK, PHONE_ENTRY_LIMIT } from '/shared/sync.js';
+import { normalizeCode, parseAddress, parseLinkUri, upsertStatement, deleteStatements, sortForApply, entryEditStatements, ENTRY_COLUMNS, ENTRY_CHUNK, ENTRY_EDIT_CHUNK, PHONE_ENTRY_LIMIT, SYNC_VERSION } from '/shared/sync.js';
 
 const fail = (status, message) => Object.assign(new Error(message), { status });
 const columns = new Map();
@@ -46,6 +46,17 @@ async function call(link, op, body, timeoutMs = 30000) {
 }
 
 // ---- Linking ----
+// From the PC's QR code: tries each of the PC's addresses (Wi-Fi, cable) until one answers.
+export async function linkFromQr(text) {
+  const parsed = parseLinkUri(text);
+  if (!parsed) throw fail(400, 'That QR code is not a DriveAtlas link code. On your PC, open Settings, Phone and helper PCs, and choose Link a phone.');
+  let last = null;
+  for (const a of parsed.addresses) {
+    try { return await link({ address: `${a.host}:${a.port}`, code: parsed.code }); } catch (err) { last = err; if (err.status !== 503) throw err; }
+  }
+  throw last;
+}
+
 export async function link({ address, code }) {
   const addr = parseAddress(address);
   if (!addr) throw fail(400, 'Type the PC address shown on your PC, like 192.168.1.20.');
@@ -63,6 +74,7 @@ export async function link({ address, code }) {
     throw fail(503, `Could not reach DriveAtlas on your PC at ${addr.host}. Check the address and that both are on the same Wi-Fi. If they are, Windows on the PC is probably keeping the phone out: DriveAtlas on the PC shows the fix next to the link code.`);
   }
   const reply = await open(key, me, 'pair', 'res', answer);
+  if (!reply.version || reply.version < SYNC_VERSION) throw fail(409, 'DriveAtlas on your PC is older than this app. Update it on the PC (version 0.4 or newer), then link again.');
   const t = Date.now();
   await db.tx([
     { sql: "UPDATE linked_devices SET revoked_at = ?, device_key = NULL WHERE role = 'pc' AND id != ?", params: [t, reply.hubId] },
@@ -70,6 +82,8 @@ export async function link({ address, code }) {
       VALUES (?, ?, 'windows', 'pc', 'pc', ?, ?, ?, ?, 0, 0, NULL)
       ON CONFLICT(id) DO UPDATE SET name = excluded.name, device_key = excluded.device_key, address = excluded.address, last_seen_at = excluded.last_seen_at,
         sent_seq = 0, received_seq = 0, revoked_at = NULL`, params: [reply.hubId, reply.hubName || 'PC', reply.deviceKey, `${addr.host}:${addr.port}`, t, t] },
+    // File-list changes: start from now on both sides (whole file lists travel once, changes after that).
+    { sql: 'UPDATE linked_devices SET received_edit_seq = ?, sent_edit_seq = (SELECT COALESCE(MAX(seq), 0) FROM entry_log) WHERE id = ?', params: [reply.editSeq || 0, reply.hubId] },
     // One account across devices: the phone takes the PC's account ID and name.
     ...(reply.account ? [{ sql: 'UPDATE owner SET account_id = ?, name = ? WHERE id = 1', params: [reply.account.id, reply.account.name] }] : [])
   ]);
@@ -100,12 +114,16 @@ async function doSync() {
   emit('sync', { state: lastState });
   let changed = false;
   try {
+    if (!pcVersion) pcVersion = (await call(l, 'hello', {})).version || 1;
+    const edits = pcVersion >= SYNC_VERSION;
     changed = (await pushChanges(l)) || changed;
     changed = (await pushEntries(l)) || changed;
+    if (edits) changed = (await pushEdits(l)) || changed;
     changed = (await pullChanges(l)) || changed;
     changed = (await pullEntries(l)) || changed;
+    if (edits) changed = (await pullEdits(l)) || changed;
     await db.run('UPDATE linked_devices SET last_sync_at = ?, last_seen_at = ? WHERE id = ?', [Date.now(), Date.now(), l.id]);
-    lastState = 'synced';
+    lastState = edits ? 'synced' : 'pc-outdated';
     emit('sync', { state: lastState });
     if (changed) emit('catalog', { reason: 'sync' });
     return { linked: true, changed };
@@ -113,6 +131,65 @@ async function doSync() {
     lastState = err.status === 503 ? 'unreachable' : 'error';
     emit('sync', { state: lastState, error: err.message });
     throw err;
+  }
+}
+
+// The PC's sync version, asked once each time the app starts (an older PC does not send file-list changes).
+let pcVersion = 0;
+export const pcOutdated = () => pcVersion > 0 && pcVersion < SYNC_VERSION;
+
+const EDIT_ROWS = `SELECT l.s, l.eid, l.seq, ${ENTRY_COLUMNS.map((c) => `e.${c} AS c_${c}`).join(', ')}
+  FROM (SELECT scan_id AS s, eid, MAX(seq) AS seq FROM entry_log WHERE seq > ? AND device_id IS NULL GROUP BY scan_id, eid ORDER BY seq LIMIT ?) l
+  LEFT JOIN entries e ON e.scan_id = l.s AND e.eid = l.eid ORDER BY l.seq`;
+
+// Entries this phone changed in place (live watching, catch-up scans) go to the PC.
+async function pushEdits(l) {
+  let since = l.sent_edit_seq || 0;
+  let any = false;
+  for (;;) {
+    const rows = await db.all(EDIT_ROWS, [since, ENTRY_EDIT_CHUNK]);
+    if (!rows.length) return any;
+    const edits = rows.map((r) => [r.s, r.eid, r.c_eid === null ? null : ENTRY_COLUMNS.map((c) => r[`c_${c}`])]);
+    await call(l, 'edits-put', { edits }, 120000);
+    since = rows[rows.length - 1].seq;
+    await db.run('UPDATE linked_devices SET sent_edit_seq = ? WHERE id = ?', [since, l.id]);
+    any = true;
+    if (rows.length < ENTRY_EDIT_CHUNK) return any;
+  }
+}
+
+// Entries the PC changed in place come to the phone, for the file lists the phone holds.
+async function pullEdits(l) {
+  let since = l.received_edit_seq || 0;
+  let any = false;
+  for (;;) {
+    const r = await call(l, 'edits-get', { since, limit: ENTRY_EDIT_CHUNK }, 120000);
+    if (r.reset) {
+      // Away for a long time: the PC no longer has every change, so its file lists come again in full.
+      const theirs = await db.all("SELECT id FROM scans WHERE indexed = 1 AND (scanned_on IS NULL OR scanned_on NOT LIKE 'phone:%')");
+      const statements = [{ sql: 'UPDATE sync_ctx SET origin = ? WHERE id = 1', params: [l.id] }];
+      for (const { id } of theirs) {
+        statements.push(
+          { sql: "INSERT INTO entries_fts(entries_fts, rowid, name) SELECT 'delete', id, name FROM entries WHERE scan_id = ? AND eid > 0", params: [id] },
+          { sql: 'DELETE FROM entries WHERE scan_id = ?', params: [id] },
+          { sql: 'UPDATE scans SET indexed = 0 WHERE id = ?', params: [id] });
+      }
+      statements.push({ sql: 'UPDATE sync_ctx SET origin = NULL WHERE id = 1', params: [] });
+      statements.push({ sql: 'UPDATE linked_devices SET received_edit_seq = ? WHERE id = ?', params: [r.next, l.id] });
+      await db.tx(statements);
+      await pullEntries(l);
+      return true;
+    }
+    if (r.edits.length) {
+      const ids = [...new Set(r.edits.map((e) => e[0]))];
+      const local = new Set((await db.all(`SELECT id FROM scans WHERE indexed = 1 AND id IN (${ids.map(() => '?').join(', ')})`, ids)).map((x) => x.id));
+      const statements = [];
+      for (const [s, eid, row] of r.edits) if (local.has(s)) statements.push(...entryEditStatements(s, eid, row, l.id));
+      if (statements.length) { await db.tx(statements); any = true; }
+    }
+    since = r.next;
+    await db.run('UPDATE linked_devices SET received_edit_seq = ? WHERE id = ?', [since, l.id]);
+    if (!r.more) return any;
   }
 }
 
@@ -216,12 +293,20 @@ let failures = 0;
 let backoffUntil = 0;
 let debounce = null;
 
+// Tries again by itself once the wait is over (while the app is open), so a Wi-Fi blip never leaves sync idle.
+let retryTimer = null;
+function retryLater() {
+  clearTimeout(retryTimer);
+  retryTimer = setTimeout(() => { retryTimer = null; kick(); }, Math.max(1000, backoffUntil - Date.now() + 200));
+}
+
 // After a failed sync (PC off, other Wi-Fi), wait 30 s, then 1, 2, 4 minutes, up to 5 minutes, before trying again.
 export function kick() {
   if (document.hidden || Date.now() < backoffUntil) return;
   syncNow().then(() => { failures = 0; backoffUntil = 0; listen(); }).catch(() => {
     failures += 1;
     backoffUntil = Date.now() + Math.min(5 * 60000, 30000 * 2 ** (failures - 1));
+    retryLater();
   });
 }
 
@@ -239,6 +324,7 @@ async function listen() {
   } catch {
     failures += 1;
     backoffUntil = Date.now() + Math.min(5 * 60000, 30000 * 2 ** (failures - 1));
+    retryLater();
   } finally {
     waiting = false;
   }

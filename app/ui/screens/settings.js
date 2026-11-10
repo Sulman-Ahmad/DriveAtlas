@@ -5,6 +5,8 @@ import { Card, Field, ErrorNote, Button, Icon, Lead, HelpTip } from '../componen
 import { LEADS, HELP } from '../help.js';
 import { RestoreForm, waitForHub } from './restore-form.js';
 import { fmtBytes, fmtDateTime, timeAgo } from '/shared/format.js';
+import { linkUri } from '/shared/sync.js';
+import { QrCode } from '../qr.js';
 
 export function Settings(props) {
   return isLocalBackend() ? html`<${PhoneSettings} ...${props} />` : html`<${PcSettings} ...${props} />`;
@@ -99,8 +101,14 @@ function DevicesCard() {
           <${Button} kind="danger" onClick=${() => unlink(dev)}>Unlink</${Button}>
         </div>`)}</div>` : html`<p class="small muted mt0">No phone linked yet. Install DriveAtlas on your Android phone, then link it here to keep both in sync on your Wi-Fi.</p>`}
       ${pair ? html`<div class="link-code" role="status">
-          <div class="small muted">On your phone, open DriveAtlas, choose Link with a PC, and type:</div>
-          <div class="kv"><dt>PC address</dt><dd class="mono big">${pair.address}</dd><dt>Link code</dt><dd class="mono big">${pair.code}</dd></div>
+          <div class="link-qr">
+            <${QrCode} text=${linkUri({ addresses: pair.addresses && pair.addresses.length ? pair.addresses : [pair.address], port: pair.port, code: pair.code })} size=${196} label="QR code to link your phone" />
+            <div class="stack-sm min0">
+              <div class="small"><strong>On your phone:</strong> open DriveAtlas, choose <strong>Link with a PC</strong>, then <strong>Scan QR code</strong> and point the camera here.</div>
+              <div class="small muted">No camera? Type these instead:</div>
+              <div class="kv"><dt>PC address</dt><dd class="mono big">${pair.address}</dd><dt>Link code</dt><dd class="mono big">${pair.code}</dd></div>
+            </div>
+          </div>
           <div class="small muted">Valid for ${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')}. Your phone must be on the same Wi-Fi as this PC.</div>
         </div>`
         : html`<div><${Button} kind="primary" icon="phone" onClick=${start}>Link a phone</${Button}></div>`}

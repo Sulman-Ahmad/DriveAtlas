@@ -9,7 +9,7 @@ import { extOf, kindOf, MEDIA_EXTS, FLAG } from '../../shared/kinds.js';
 
 const FP_CHUNK = 64 * 1024;
 const BATCH = 2000;
-const SYSTEM_NAMES = new Set(['$recycle.bin', 'system volume information', 'pagefile.sys', 'hiberfil.sys', 'swapfile.sys',
+export const SYSTEM_NAMES = new Set(['$recycle.bin', 'system volume information', 'pagefile.sys', 'hiberfil.sys', 'swapfile.sys',
   'dumpstack.log.tmp', 'dumpstack.log', '$windows.~bt', '$windows.~ws', '$sysreset', '$winreagent', 'config.msi', 'msocache',
   'bootmgr', 'bootnxt', '$getcurrent', 'recovery', 'documents and settings']);
 const HIDDEN_NAMES = new Set(['desktop.ini', 'thumbs.db', '.ds_store']);
@@ -17,7 +17,7 @@ const HIDDEN_NAMES = new Set(['desktop.ini', 'thumbs.db', '.ds_store']);
 // Control codes shared with the main thread: 0 run, 1 pause, 2 cancel.
 export const CTRL = { RUN: 0, PAUSE: 1, CANCEL: 2 };
 
-function flagsFor(name) {
+export function flagsFor(name) {
   const low = name.toLowerCase();
   let f = 0;
   if (SYSTEM_NAMES.has(low)) f |= FLAG.SYSTEM | FLAG.HIDDEN;
@@ -25,7 +25,7 @@ function flagsFor(name) {
   return f;
 }
 
-function fingerprintAndHead(fd, size, wantHead) {
+export function fingerprintAndHead(fd, size, wantHead) {
   const hash = crypto.createHash('sha1');
   hash.update(`${size}:`);
   const firstLen = Math.min(size, Math.max(FP_CHUNK, wantHead ? HEAD_BYTES : 0));
@@ -50,7 +50,7 @@ function fingerprintAndHead(fd, size, wantHead) {
 
 // Builds a matcher for excluded folders: plain names ("node_modules") match
 // anywhere; paths with a backslash ("Windows\WinSxS") match from the root.
-function excluder(list = []) {
+export function excluder(list = []) {
   const names = new Set();
   const paths = new Set();
   for (const raw of list) {
@@ -216,5 +216,6 @@ export function deleteScanData(db, scanId) {
     db.prepare(`INSERT INTO entries_fts(entries_fts, rowid, name) SELECT 'delete', id, name FROM entries WHERE scan_id = ? AND eid > 0`).run(scanId);
   }
   db.prepare('DELETE FROM entries WHERE scan_id = ?').run(scanId);
+  db.prepare('DELETE FROM entry_log WHERE scan_id = ?').run(scanId);
   db.prepare('DELETE FROM scans WHERE id = ?').run(scanId);
 }

@@ -2,7 +2,8 @@
 import { spawn } from 'node:child_process';
 import path from 'node:path';
 import { EventEmitter } from 'node:events';
-import { APP_DIR } from './config.mjs';
+import fs from 'node:fs';
+import { APP_DIR, TEST_MODE } from './config.mjs';
 
 const PS = 'powershell.exe';
 const PS_ARGS = ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File'];
@@ -85,7 +86,11 @@ export function matchIdsFor(disk) {
 // Stable key for a connected disk within this session (used by the interface).
 export const diskKey = (disk) => matchIdsFor(disk)[0] || `n:${disk.number}:${disk.size}`;
 
+// Test catalogs only: drives described in a file (DRIVEATLAS_DEMO_DISKS) instead of the PC's own, for demos and screenshots.
+const DEMO_DISKS = TEST_MODE ? process.env.DRIVEATLAS_DEMO_DISKS || null : null;
+
 export async function readDisks() {
+  if (DEMO_DISKS) return JSON.parse(fs.readFileSync(DEMO_DISKS, 'utf8')).map(normalize);
   const out = await runPs('inventory.ps1');
   const parsed = JSON.parse(out || '[]');
   return (Array.isArray(parsed) ? parsed : [parsed]).filter(Boolean).map(normalize);
@@ -132,6 +137,7 @@ export class DiskWatcher extends EventEmitter {
 
   start() {
     this.refresh();
+    if (DEMO_DISKS) return;
     this.spawnWatcher();
     // Safety net in case the watcher process stops: full refresh every 60 s.
     this.timer = setInterval(() => this.refresh(), 60000);

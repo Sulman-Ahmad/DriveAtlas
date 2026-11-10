@@ -46,6 +46,44 @@ function migrate(d) {
   return version;
 }
 
+// ---------- File lists kept up to date ----------
+// Folder totals after entries changed in place: the changed folders and every folder above them, deepest first.
+function recompute(scanId, eids) {
+  const parentOf = new Map();
+  const parent = (e) => {
+    if (!parentOf.has(e)) parentOf.set(e, db.selectValue('SELECT parent_eid FROM entries WHERE scan_id = ? AND eid = ?', [scanId, e]) ?? null);
+    return parentOf.get(e);
+  };
+  const all = new Set();
+  for (const e of eids) { let cur = e; while (cur !== null && cur !== undefined && !all.has(cur)) { all.add(cur); cur = parent(cur); } }
+  const depth = new Map();
+  const depthOf = (e) => { if (!depth.has(e)) { const p = parent(e); depth.set(e, p === null ? 0 : depthOf(p) + 1); } return depth.get(e); };
+  const order = [...all].sort((a, b) => depthOf(b) - depthOf(a));
+  const now = Date.now();
+  let changed = 0;
+  db.exec('BEGIN');
+  try {
+    for (const e of order) {
+      const cur = db.selectObject('SELECT size, items, is_dir FROM entries WHERE scan_id = ? AND eid = ?', [scanId, e]);
+      if (!cur || !cur.is_dir) continue;
+      const t = db.selectObject(`SELECT COALESCE(SUM(size), 0) AS size, COALESCE(SUM(CASE WHEN is_dir = 1 THEN COALESCE(items, 0) ELSE 1 END), 0) AS items
+        FROM entries WHERE scan_id = ? AND parent_eid = ?`, [scanId, e]);
+      if (cur.size === t.size && cur.items === t.items) continue;
+      db.exec({ sql: 'UPDATE entries SET size = ?, items = ? WHERE scan_id = ? AND eid = ?', bind: [t.size, t.items, scanId, e] });
+      db.exec({ sql: 'INSERT INTO entry_log (scan_id, eid, deleted, device_id, changed_at) VALUES (?, ?, 0, NULL, ?)', bind: [scanId, e, now] });
+      changed += 1;
+    }
+    const c = db.selectObject('SELECT COALESCE(SUM(is_dir), 0) AS dirs, COUNT(*) AS n FROM entries WHERE scan_id = ? AND eid > 0', [scanId]);
+    const top = db.selectValue('SELECT size FROM entries WHERE scan_id = ? AND eid = 0', [scanId]) || 0;
+    db.exec({ sql: 'UPDATE scans SET file_count = ?, folder_count = ?, total_bytes = ?, updated_at = ? WHERE id = ?', bind: [c.n - c.dirs, c.dirs, top, now, scanId] });
+    db.exec('COMMIT');
+  } catch (err) {
+    db.exec('ROLLBACK');
+    throw err;
+  }
+  return { changed };
+}
+
 // ---------- Backups ----------
 // Settings that belong to this phone only (its PIN, device ID, sync state and backup folder). They never go into a
 // backup, and a restore keeps this phone's own. The backup key does go along, so a PC restoring the backup can keep
@@ -179,6 +217,7 @@ const ops = {
   // A consistent copy of the whole database as bytes.
   export: () => exportBytes(db),
   backupCopy: () => backupCopy(),
+  recompute: ({ scanId, eids }) => recompute(scanId, eids),
   restore: (msg) => restoreFrom(msg)
 };
 

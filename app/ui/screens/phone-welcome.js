@@ -112,12 +112,27 @@ export function PhoneLink({ onDone, onBack, onSkip, embedded = false }) {
     setBusy(true);
     try { await api('POST', '/api/phone/link', { address, code }); onDone(); } catch (err) { setError(err.message); setBusy(false); }
   }
-  return html`<${Shell} embedded=${embedded} title="Link with your PC" lead="On your PC, open DriveAtlas, go to Settings, Phone and helper PCs, and choose Link a phone. Type what it shows here. Both must be on the same Wi-Fi.">
+  // The PC shows a QR code holding its address and the link code: one scan links.
+  async function scan() {
+    setError('');
+    try {
+      const r = await api('POST', '/api/phone/scan-qr');
+      if (!r || !r.text) return;
+      setBusy(true);
+      await api('POST', '/api/phone/link', { qr: r.text });
+      onDone();
+    } catch (err) { setError(err.message); setBusy(false); }
+  }
+  return html`<${Shell} embedded=${embedded} title="Link with your PC" lead="On your PC, open DriveAtlas, go to Settings, Phone and helper PCs, and choose Link a phone. Then scan the QR code it shows. Both must be on the same Wi-Fi.">
+    <div class="stack">
+      <button type="button" class="btn btn-primary btn-block" onClick=${scan} disabled=${busy}><${Icon} name="qr" size=${18} />${busy ? 'Linking and syncing…' : 'Scan QR code'}</button>
+      <div class="or-line small muted"><span>or type what the PC shows</span></div>
+    </div>
     <form class="stack" onSubmit=${link}>
       <${Field} label="PC address" id="ph-addr" hint="Like 192.168.1.20"><input id="ph-addr" value=${address} onInput=${(e) => setAddress(e.target.value)} inputmode="decimal" autocomplete="off" spellcheck="false" required maxlength="21" /></${Field}>
       <${Field} label="Link code" id="ph-code" hint="16 letters and numbers, valid for 2 minutes."><input id="ph-code" value=${code} onInput=${(e) => setCode(e.target.value)} autocomplete="off" autocapitalize="characters" spellcheck="false" required maxlength="24" /></${Field}>
       <${ErrorNote} error=${error} />
-      <button class="btn btn-primary btn-block" type="submit" disabled=${busy}>${busy ? 'Linking and syncing…' : 'Link'}</button>
+      <button class="btn btn-secondary btn-block" type="submit" disabled=${busy}>${busy ? 'Linking and syncing…' : 'Link'}</button>
       <p class="small muted mt0">Can’t connect?<${HelpTip} text=${HELP.phoneCantConnect} label="Why the phone can’t connect" /></p>
       ${onSkip ? html`<button type="button" class="btn btn-secondary btn-block" onClick=${onSkip} disabled=${busy}>Link later</button>` : null}
       ${onBack ? html`<button type="button" class="link small" onClick=${onBack}>Back</button>` : null}

@@ -42,7 +42,9 @@ export const db = {
   export: () => send({ op: 'export' }),
   backupCopy: () => send({ op: 'backupCopy' }),
   // keep: [{ key, value }] settings of this phone to carry over into the restored catalog
-  restore: (bytes, keep) => send({ op: 'restore', bytes, keep })
+  restore: (bytes, keep) => send({ op: 'restore', bytes, keep }),
+  // Works out folder sizes and file counts again for these folders and everything above them.
+  recompute: (scanId, eids) => send({ op: 'recompute', scanId, eids })
 };
 
 export async function getSetting(key, fallback = null) {

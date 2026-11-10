@@ -3,7 +3,7 @@ import crypto from 'node:crypto';
 import { tx } from './db.mjs';
 import { matchIdsFor, diskKey } from './disks.mjs';
 import { httpError } from './auth.mjs';
-import { guessType, bootKindFrom, typeById, BOOT_KINDS } from '../shared/drive-types.js';
+import { guessType, bootKindFrom, typeById, BOOT_KINDS, brandFromModel } from '../shared/drive-types.js';
 import { advertisedFromSize, fmtBytes } from '../shared/format.js';
 
 const JSON_FIELDS = ['tags', 'match_ids'];
@@ -63,7 +63,7 @@ function cleanBrand(disk) {
   const known = ['Samsung', 'Toshiba', 'Kioxia', 'Western Digital', 'WD', 'Seagate', 'Crucial', 'Kingston', 'SanDisk', 'Intel',
     'SK hynix', 'Micron', 'Lexar', 'Transcend', 'ADATA', 'PNY', 'Corsair', 'Sabrent', 'Hitachi', 'HGST', 'Verbatim', 'Sony'];
   const hit = known.find((b) => new RegExp(`\\b${b}\\b`, 'i').test(name) || (disk.manufacturer || '').toLowerCase().includes(b.toLowerCase()));
-  return hit || '';
+  return hit || brandFromModel(disk.model) || brandFromModel(name) || '';
 }
 
 function partitionRows(driveId, disk) {
@@ -174,6 +174,7 @@ export function deleteDrive(db, id) {
     // that reuses the same row numbers would be found under these old names.
     db.prepare(`INSERT INTO entries_fts(entries_fts, rowid, name) SELECT 'delete', e.id, e.name FROM entries e JOIN scans s ON s.id = e.scan_id
       WHERE s.drive_id = ? AND s.indexed = 1 AND e.eid > 0`).run(id);
+    db.prepare('DELETE FROM entry_log WHERE scan_id IN (SELECT id FROM scans WHERE drive_id = ?)').run(id);
     const r = db.prepare('DELETE FROM drives WHERE id = ?').run(id);
     if (!r.changes) throw httpError(404, 'That drive is not in your catalog.');
   });

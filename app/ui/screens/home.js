@@ -1,5 +1,6 @@
 // Home: totals, drives connected right now, and what needs attention.
 import { html, go } from '../lib.js';
+import { brandAndModel } from '/shared/drive-types.js';
 import { Icon, TypeTile, Card, CapacityBar, HealthPill, Pill, LinkButton, Empty, healthInfo, Lead, HelpTip } from '../components.js';
 import { LEADS, HELP } from '../help.js';
 import { fmtBytes, percent } from '/shared/format.js';
@@ -75,6 +76,7 @@ function ConnectedRow({ d, drive }) {
     <div class="grow">
       <div class="row-title">${d.driveName || d.friendlyName}
         <span class="muted small"> ${[d.letters.map((l) => `${l}:`).join(' '), d.busType, d.mediaType].filter(Boolean).join(' · ')}</span></div>
+      ${(drive ? brandAndModel(drive) : d.model) ? html`<div class="drive-brand small">${drive ? brandAndModel(drive) : d.model}</div>` : null}
       <${CapacityBar} used=${d.used} total=${d.size} />
     </div>
     <span class="row-num small muted">${fmtBytes(d.used)} of ${fmtBytes(d.size)}</span>

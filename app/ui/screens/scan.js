@@ -89,7 +89,8 @@ export function Scan({ data }) {
       <div class="col-side">
         <${Card} id="h-opts" title="Scan options" help=${HELP.scanOptions}>
           ${settings ? html`<div class="stack">
-            ${[['media', 'Photo and video details', 'Reads small file headers: resolution, duration, date taken.', HELP.mediaDetails],
+            ${[['live', 'Keep file lists up to date', 'After the first scan, changes are picked up as they happen. Only what changed is read.', HELP.liveUpdates],
+               ['media', 'Photo and video details', 'Reads small file headers: resolution, duration, date taken.', HELP.mediaDetails],
                ['fingerprint', 'Quick fingerprint', 'Reads up to 128 KB per file to spot the same file on other drives.', HELP.fingerprints],
                ['hidden', 'Hidden and system files', 'Listed, but hidden in the file browser until you show them.', HELP.hiddenFiles]].map(([k, label, hint, help]) => html`
               <div class="check-line"><label class="check-row" for=${`opt-${k}`}><input id=${`opt-${k}`} type="checkbox" checked=${settings[k]} onChange=${(e) => save({ [k]: e.target.checked })} />

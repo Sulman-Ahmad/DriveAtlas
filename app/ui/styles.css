@@ -167,6 +167,15 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .drive-card:hover { border-color: var(--accent); }
 .drive-card-head { display: flex; gap: 12px; align-items: center; }
 .drive-name { font-weight: 600; font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.drive-brand { color: var(--text); opacity: .78; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.drive-head .drive-brand { font-size: 15px; }
+.live-line { display: flex; align-items: center; gap: 8px; margin-top: 4px; }
+.live-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--good); flex: none; box-shadow: 0 0 0 3px color-mix(in srgb, var(--good) 22%, transparent); }
+.drive-card-head .live-dot { margin-left: auto; }
+.drive-card-head .badge-dot + .live-dot { margin-left: 6px; }
+.live-dot-busy { background: var(--accent); animation: live-pulse 1.2s ease-in-out infinite; }
+@keyframes live-pulse { 50% { opacity: .35; } }
+@media (prefers-reduced-motion: reduce) { .live-dot-busy { animation: none; } }
 
 /* Drive page */
 .drive-head { display: flex; flex-wrap: wrap; gap: 16px; align-items: center; }
@@ -376,4 +385,8 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .toast { animation: da-fade-up .2s ease-out both; }
 .link-code { display: flex; flex-direction: column; gap: 10px; padding: 14px 16px; border-radius: 12px; background: var(--accent-soft); }
 .link-code .big { font-size: 20px; font-weight: 600; letter-spacing: .04em; color: var(--text); }
+.link-qr { display: flex; gap: 18px; align-items: center; flex-wrap: wrap; }
+.or-line { display: flex; align-items: center; gap: 10px; }
+.or-line::before, .or-line::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+.qr { flex: none; border-radius: 10px; background: #fff; box-shadow: 0 0 0 1px var(--border); }
 .row-flat { padding: 0; border: 0; }

@@ -32,10 +32,10 @@ const UI_DIR = path.join(APP_DIR, 'ui');
 const SHARED_DIR = path.join(APP_DIR, 'shared');
 const delay = (ms) => new Promise((r) => setTimeout(r, ms));
 
-export const SCAN_DEFAULTS = { media: true, fingerprint: true, hidden: true, keepScans: 3, exclude: [] };
+export const SCAN_DEFAULTS = { media: true, fingerprint: true, hidden: true, keepScans: 3, exclude: [], live: true };
 export const scanDefaults = (db) => ({ ...SCAN_DEFAULTS, ...getSetting(db, 'scanDefaults', {}) });
 
-export function createHub({ db, watcher, scans, lan, restart, stop }) {
+export function createHub({ db, watcher, scans, lan, live, restart, stop }) {
   const router = new Router();
   const clients = new Set();
   const general = new RateLimiter({ windowMs: 60_000, max: 600 });
@@ -207,7 +207,9 @@ export function createHub({ db, watcher, scans, lan, restart, stop }) {
     return { ready: watcher.ready, disks: connectedView(db, watcher.disks) };
   });
 
-  router.on('GET', '/api/drives', () => ({ drives: withLive(db, watcher.disks) }));
+  const watchOf = () => (live ? live.status().drives : {});
+  router.on('GET', '/api/drives', () => { const w = watchOf(); return { drives: withLive(db, watcher.disks).map((d) => ({ ...d, watch: w[d.id] || null })) }; });
+  router.on('GET', '/api/live', () => (live ? live.status() : { enabled: false, drives: {} }));
 
   router.on('POST', '/api/drives', async (ctx) => {
     const body = plainObject(await readJson(ctx.req));
@@ -227,9 +229,9 @@ export function createHub({ db, watcher, scans, lan, restart, stop }) {
   router.on('GET', '/api/drives/:id', (ctx) => {
     const drive = getDrive(db, uuid(ctx.params.id, 'drive'));
     if (!drive) throw httpError(404, 'That drive is not in your catalog.');
-    const live = withLive(db, watcher.disks).find((d) => d.id === drive.id);
+    const conn = withLive(db, watcher.disks).find((d) => d.id === drive.id);
     const disk = watcher.disks.find((d) => matchDisk([drive], d));
-    return { drive: { ...drive, ...pickLive(live) }, disk: disk || null };
+    return { drive: { ...drive, ...pickLive(conn), watch: watchOf()[drive.id] || null }, disk: disk || null };
   });
 
   router.on('PATCH', '/api/drives/:id', async (ctx) => {
@@ -268,6 +270,14 @@ export function createHub({ db, watcher, scans, lan, restart, stop }) {
 
   // ---- Scanning ----
   router.on('GET', '/api/scans', () => scans.status());
+
+  // Quick catch-up: compares the drive with its file list and records only what changed.
+  router.on('POST', '/api/drives/:id/catch-up', (ctx) => {
+    const id = uuid(ctx.params.id, 'drive');
+    if (!live || !live.enabled()) throw httpError(409, 'Turn on “Keep file lists up to date” in Settings first.');
+    if (!live.catchUp(id)) throw httpError(409, 'Plug this drive in and scan it once on this PC; after that DriveAtlas keeps its file list up to date.');
+    return { ok: true };
+  });
 
   router.on('POST', '/api/drives/:id/scan', async (ctx) => {
     const body = plainObject(await readJson(ctx.req));
@@ -314,7 +324,7 @@ export function createHub({ db, watcher, scans, lan, restart, stop }) {
   router.on('PUT', '/api/settings/scan', async (ctx) => {
     const body = plainObject(await readJson(ctx.req));
     const next = { ...scanDefaults(db) };
-    for (const k of ['media', 'fingerprint', 'hidden']) { const v = bool(body[k], k); if (v !== undefined) next[k] = v; }
+    for (const k of ['media', 'fingerprint', 'hidden', 'live']) { const v = bool(body[k], k); if (v !== undefined) next[k] = v; }
     const keep = int(body.keepScans, 'Scan history', 1, 20);
     if (keep) next.keepScans = keep;
     if (body.exclude !== undefined) {
@@ -322,6 +332,7 @@ export function createHub({ db, watcher, scans, lan, restart, stop }) {
       next.exclude = [...new Set(body.exclude.map((x) => text(x, 'A skipped folder', 240)).filter(Boolean))];
     }
     setSetting(db, 'scanDefaults', next);
+    if (live) live.update();
     return next;
   });
 

@@ -4,7 +4,7 @@ import { startScan } from '../scan-start.js';
 import { Icon, Card, TypeTile, StatusPill, HealthPill, BootPill, CapacityBar, UsageLine, Button, Pill, ErrorNote, NO_HEALTH_TYPES, HelpTip } from '../components.js';
 import { HELP } from '../help.js';
 import { DriveForm } from './drive-form.js';
-import { typeById, BOOT_KINDS, statusName } from '/shared/drive-types.js';
+import { typeById, BOOT_KINDS, statusName, brandAndModel } from '/shared/drive-types.js';
 import { fmtBytes, fmtAdvertised, fmtDate, fmtNumber, timeAgo } from '/shared/format.js';
 
 export function DrivePage({ id, data, onChanged }) {
@@ -42,6 +42,11 @@ export function DrivePage({ id, data, onChanged }) {
     try { await startScan(id); go('#/scan'); } catch (err) { setError(err.message); setBusy(false); }
   }
 
+  async function checkChanges() {
+    setError('');
+    try { await api('POST', `/api/drives/${id}/catch-up`); await load(); } catch (err) { setError(err.message); }
+  }
+
   async function remove() {
     setBusy(true);
     try {
@@ -57,7 +62,8 @@ export function DrivePage({ id, data, onChanged }) {
       <${TypeTile} type=${d.type} size=${56} />
       <div class="grow stack-sm">
         <h1>${d.name}</h1>
-        <div class="muted">${brandModel || kind} · ${kind}${d.advertised_bytes ? ` · ${fmtAdvertised(d.advertised_bytes)}` : ''}${d.actual_bytes ? ` (${fmtBytes(d.actual_bytes)} usable)` : ''}</div>
+        ${brandModel ? html`<div class="drive-brand">${brandModel}</div>` : null}
+        <div class="muted">${kind}${d.advertised_bytes ? ` · ${fmtAdvertised(d.advertised_bytes)}` : ''}${d.actual_bytes ? ` (${fmtBytes(d.actual_bytes)} usable)` : ''}</div>
         <div class="pills"><${StatusPill} drive=${d} /><${HealthPill} health=${d.health_status} type=${d.type} state=${d.health_state} pct=${d.health_pct} /><${BootPill} kind=${boot} />
           ${d.label_code ? html`<span class="pill-help"><${Pill} tone="plain" icon="qr">${d.label_code}</${Pill}><${HelpTip} text=${HELP.labelCode} label="About the label code" /></span>` : null}</div>
       </div>
@@ -91,8 +97,8 @@ export function DrivePage({ id, data, onChanged }) {
         <${Card} id="h-files" title="Files" help=${HELP.files} extra=${state.scans.length ? html`<a class="link push small" href=${`#/files/${d.id}`}>Browse files</a>` : null}>
           ${state.scans.length ? html`<div class="stack-sm">${state.scans.map((s) => html`<a class="scan-line" href=${`#/files/${d.id}?scan=${s.id}&dir=0`}>
               <${Icon} name="folder" size=${18} /><strong>${s.partition_label || `Partition ${s.partition_idx}`}</strong>
-              <span class="muted small num">${fmtNumber(s.file_count)} files · ${fmtNumber(s.folder_count)} folders · ${fmtBytes(s.total_bytes)} · scanned ${timeAgo(s.finished_at)}</span>
-            </a>`)}</div>`
+              <span class="muted small num">${fmtNumber(s.file_count)} files · ${fmtNumber(s.folder_count)} folders · ${fmtBytes(s.total_bytes)} · scanned ${timeAgo(s.finished_at)}${s.updated_at && s.updated_at > s.finished_at ? ` · updated ${timeAgo(s.updated_at)}` : ''}</span>
+            </a>`)}<${LiveLine} d=${d} onCheck=${checkChanges} busy=${busy} /></div>`
           : html`<p class="small muted mt0">${d.connected ? 'Not scanned yet. Scan it to record its folders and files; nothing is copied.' : 'Not scanned yet. Plug it in to scan it.'}</p>`}
         </${Card}>
         <${HealthSection} d=${d} history=${state.health} onRead=${async () => { await onChanged(); await load(); }} />
@@ -229,12 +235,20 @@ function Sparkline({ points }) {
   </svg>`;
 }
 
-// "Samsung" + "SAMSUNG MZVLB512" shows once, not twice.
-function brandAndModel(d) {
-  const brand = (d.brand || '').trim();
-  const model = (d.model || '').trim();
-  if (brand && model.toLowerCase().includes(brand.toLowerCase())) return model;
-  return [brand, model].filter(Boolean).join(' ');
+
+// Whether DriveAtlas is keeping this drive's file list up to date right now.
+function LiveLine({ d, onCheck, busy }) {
+  const w = d.watch;
+  if (!d.connected) return null;
+  if (!w) return html`<p class="small muted mt0 live-line">Plugged in. Scan it again to update its file list.</p>`;
+  const text = w.state === 'catching-up' ? `Checking for changes since the last scan…${w.progress ? ` ${fmtNumber(w.progress.folders)} folders checked` : ''}`
+    : w.state === 'updating' ? 'Saving changes…'
+      : `Watching for changes${w.lastChangeAt ? ` · last change ${timeAgo(w.lastChangeAt)}` : ''}`;
+  return html`<div class="live-line small">
+    <span class=${`live-dot ${w.state === 'watching' ? '' : 'live-dot-busy'}`} aria-hidden="true"></span>
+    <span class="grow muted">${text}${w.error ? html` <span class="warn-text">${w.error}</span>` : null}</span>
+    ${w.state === 'watching' ? html`<button type="button" class="link small" disabled=${busy} onClick=${onCheck}>Check for changes</button><${HelpTip} text=${HELP.liveUpdates} label="About keeping file lists up to date" />` : null}
+  </div>`;
 }
 
 const row = (k, v) => (v ? html`<div class="kv-row"><dt>${k}</dt><dd>${v}</dd></div>` : null);

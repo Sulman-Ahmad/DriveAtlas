@@ -95,7 +95,7 @@ function Main({ state, onSignedOut, onStopped, onTheme }) {
       const where = p.letters.length ? ` as ${p.letters.map((l) => `${l}:`).join(' ')}` : '';
       toast(p.changes.length
         ? { icon: 'sync', title: `${p.name} plugged in${where}`, body: `${p.changes.length} change${p.changes.length > 1 ? 's' : ''} found since last time. Review before updating.`, href: `#/drive/${p.driveId}`, action: 'Review changes', sticky: true }
-        : { icon: 'check', title: `${p.name} plugged in${where}`, body: 'Recognised from your catalog.', href: `#/drive/${p.driveId}`, action: 'Open' });
+        : { icon: 'check', title: `${p.name} plugged in${where}`, body: p.lastScannedAt ? 'Recognised from your catalog. Checking its files for changes since last time.' : 'Recognised from your catalog.', href: `#/drive/${p.driveId}`, action: 'Open' });
     });
     es.addEventListener('new-disk', (e) => {
       const p = JSON.parse(e.data);
@@ -169,7 +169,7 @@ function Main({ state, onSignedOut, onStopped, onTheme }) {
           </select></label>
         <div class="hub-card">
           <div class="hub-line"><span class="dot dot-good"></span><strong>Hub running</strong></div>
-          <div class="muted mono">${location.host} · v${state.version}</div>
+          <div class="muted mono">${location.host} · <span class="nowrap">v${state.version}</span></div>
           <div class="muted">${state.owner ? `Signed in as ${state.owner.name}` : ''}</div>
           <button type="button" class="link small" onClick=${signOut}>Sign out</button>
         </div>

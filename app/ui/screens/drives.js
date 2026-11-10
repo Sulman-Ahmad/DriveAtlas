@@ -2,7 +2,7 @@
 import { html, useState } from '../lib.js';
 import { TypeTile, StatusPill, HealthPill, BootPill, CapacityBar, UsageLine, LinkButton, Empty, Icon, Lead, HelpTip } from '../components.js';
 import { LEADS, HELP } from '../help.js';
-import { typeById } from '/shared/drive-types.js';
+import { typeById, brandAndModel } from '/shared/drive-types.js';
 import { fmtAdvertised } from '/shared/format.js';
 
 const FILTERS = [
@@ -66,8 +66,9 @@ export function DriveCard({ d }) {
   return html`<a class="card drive-card" href=${`#/drive/${d.id}`}>
     <div class="drive-card-head">
       <${TypeTile} type=${d.type} />
-      <div class="min0"><div class="drive-name">${d.name}</div><div class="small muted">${kind}${d.advertised_bytes ? ` · ${fmtAdvertised(d.advertised_bytes)}` : ''}</div></div>
+      <div class="min0"><div class="drive-name">${d.name}</div>${brandAndModel(d) ? html`<div class="drive-brand small">${brandAndModel(d)}</div>` : null}<div class="small muted">${kind}${d.advertised_bytes ? ` · ${fmtAdvertised(d.advertised_bytes)}` : ''}</div></div>
       ${d.hasPendingChanges ? html`<span class="badge-dot" title="Changes waiting for review"></span>` : null}
+      ${d.watch ? html`<span class=${`live-dot ${d.watch.state === 'watching' ? '' : 'live-dot-busy'}`} title=${d.watch.state === 'watching' ? 'File list kept up to date' : 'Checking for changes'}></span>` : null}
     </div>
     <div><${CapacityBar} used=${d.used} total=${d.total} /><div class="mt6"><${UsageLine} used=${d.used} total=${d.total} /></div></div>
     <div class="pills">

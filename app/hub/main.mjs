@@ -15,6 +15,7 @@ import { DiskWatcher, diskKey } from './disks.mjs';
 import { createHub, scanDefaults } from './api.mjs';
 import { syncConnected, connectedView } from './catalog.mjs';
 import { ScanManager } from './scan/manager.mjs';
+import { LiveManager } from './live.mjs';
 
 if (BACKGROUND) {
   const log = fs.createWriteStream(LOG_PATH, { flags: 'a' });
@@ -44,7 +45,12 @@ const url = `http://localhost:${PORT}/`;
 let server;
 // Wi-Fi access for linked phones; runs only while a device is linked or a link code is waiting.
 const lan = createLan({ db, onChange: (what) => hub.broadcast(what === 'devices' ? 'devices' : 'catalog', { reason: 'sync' }) });
-const hub = createHub({ db, watcher, scans, lan, restart, stop: () => setTimeout(shutdown, 400) });
+// Keeps file lists up to date while drives are plugged in (Windows change notifications, no polling).
+const live = new LiveManager({ db, dbPath: DB_PATH, getDisks: () => watcher.disks, scans, getDefaults: () => scanDefaults(db) });
+const hub = createHub({ db, watcher, scans, lan, live, restart, stop: () => setTimeout(shutdown, 400) });
+let liveTimer = null;
+live.on('status', () => { if (!liveTimer) liveTimer = setTimeout(() => { liveTimer = null; hub.broadcast('live', live.status()); }, 300); });
+live.on('changed', (c) => hub.broadcast('catalog', { reason: 'live', id: c.driveId, changed: c.changed }));
 
 let lastProgress = 0;
 scans.on('progress', (view) => {
@@ -61,6 +67,7 @@ scans.on('finished', (view) => {
 watcher.on('change', ({ disks, added, removed, first }) => {
   const result = syncConnected(db, disks);
   hub.broadcast('disks', { disks: connectedView(db, disks) });
+  live.update();
   if (first) return;
   for (const disk of added) {
     const m = result.matched.find((x) => x.disk === disk);
@@ -110,6 +117,7 @@ export function openWindow() {
 function restart() {
   console.log('[hub] restarting');
   lan.stop();
+  live.stop();
   scans.stop();
   watcher.stop();
   server.close();
@@ -156,6 +164,7 @@ server.listen(PORT, HOST, () => {
 function shutdown() {
   console.log('[hub] stopping');
   lan.stop();
+  live.stop();
   scans.stop();
   watcher.stop();
   server.close();

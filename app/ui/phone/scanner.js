@@ -178,6 +178,7 @@ export function deleteScanStatements(scanId) {
   return [
     { sql: "INSERT INTO entries_fts(entries_fts, rowid, name) SELECT 'delete', e.id, e.name FROM entries e JOIN scans s ON s.id = e.scan_id WHERE s.id = ? AND s.indexed = 1 AND e.eid > 0", params: [scanId] },
     { sql: 'DELETE FROM entries WHERE scan_id = ?', params: [scanId] },
+    { sql: 'DELETE FROM entry_log WHERE scan_id = ?', params: [scanId] },
     { sql: 'DELETE FROM scans WHERE id = ?', params: [scanId] }
   ];
 }
