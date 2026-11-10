@@ -2,6 +2,7 @@
 import { html, useState, useEffect, api } from '../lib.js';
 import { Icon, Field, ErrorNote } from '../components.js';
 import { IntroContent, Shell } from './welcome.js';
+import { RestorePanel } from './phone-backups.js';
 
 // First start on the phone: the introduction, where the catalog lives, the PIN, then (if chosen) linking to a PC.
 export function PhoneSetup({ state, onDone }) {
@@ -24,13 +25,20 @@ export function PhoneSetup({ state, onDone }) {
       <div class="stack" role="radiogroup" aria-label="Where your catalog lives">
         ${option('phone', 'phone', 'Keep my catalog on this phone', 'No PC needed. Record this phone’s storage and any USB drive or SSD you plug in, and search them anywhere.')}
         ${option('pc', 'laptop', 'Connect to DriveAtlas on my PC', 'Link with DriveAtlas on your PC. Both keep the whole catalog and sync on your Wi-Fi.')}
+        ${option('restore', 'download', 'Restore from a backup', 'Bring back your catalog from a DriveAtlas backup file made on a phone or your PC.')}
       </div>
       <div class="callout callout-plain small"><${Icon} name="lock" size=${18} /><span class="grow">Next you’ll set a PIN${state.phone?.biometricAvailable ? ' and can turn on fingerprint unlock' : ''}. Only names, sizes and dates are recorded, never what is inside your files.</span></div>
-      <button type="button" class="btn btn-primary btn-block" onClick=${() => setStep('create')}>Continue</button>
+      <button type="button" class="btn btn-primary btn-block" onClick=${() => setStep(where === 'restore' ? 'restore' : 'create')}>Continue</button>
       <button type="button" class="link small" onClick=${() => setStep('intro')}>Back</button>
     </div></main>`;
   }
   if (step === 'link') return html`<${PhoneLink} onDone=${onDone} onSkip=${onDone} />`;
+  if (step === 'restore') {
+    return html`<${Shell} title="Restore from a backup" lead="Pick a DriveAtlas backup file and type the password it was made with. Then set the PIN that opens DriveAtlas on this phone.">
+      <${RestorePanel} first=${true} biometricAvailable=${Boolean(state.phone?.biometricAvailable)} onRestored=${onDone} />
+      <button type="button" class="link small" onClick=${() => setStep('where')}>Back</button>
+    </${Shell}>`;
+  }
   return html`<${PhoneCreate} state=${state} onCreated=${where === 'pc' ? () => setStep('link') : onDone} onBack=${() => setStep('where')} />`;
 }
 

@@ -39,7 +39,10 @@ export const db = {
   exec: (sql) => send({ op: 'exec', sql }),
   // statements: [{ sql, params } | { sql, rows: [[...]] } | { sql, params, select: true }], all in one transaction
   tx: (statements) => send({ op: 'tx', statements }),
-  export: () => send({ op: 'export' })
+  export: () => send({ op: 'export' }),
+  backupCopy: () => send({ op: 'backupCopy' }),
+  // keep: [{ key, value }] settings of this phone to carry over into the restored catalog
+  restore: (bytes, keep) => send({ op: 'restore', bytes, keep })
 };
 
 export async function getSetting(key, fallback = null) {

@@ -108,6 +108,7 @@ public class DriveAtlasStoragePlugin extends Plugin {
             mediaReceiver = null;
         }
         worker.shutdownNow();
+        io.shutdown();
     }
 
     // ---------- Phone and volumes ----------
@@ -265,6 +266,187 @@ public class DriveAtlasStoragePlugin extends Plugin {
             }
         } catch (Exception ignored) { }
         return null;
+    }
+
+    // ---------- Backup files ----------
+    // Backups go to a folder you pick with Android's own picker (on the phone, an SD card, a USB drive or a cloud
+    // app). DriveAtlas only writes, lists and deletes its own backup files there, and only reads a file you pick.
+
+    private static final long MAX_BACKUP = 256L * 1024 * 1024;
+    private static final java.util.regex.Pattern BACKUP_NAME = java.util.regex.Pattern.compile("^DriveAtlas-backup-\\d{4}-\\d{2}-\\d{2}-\\d{4}( \\(\\d+\\))?\\.dabackup$");
+    private final ExecutorService io = Executors.newSingleThreadExecutor();
+
+    @PluginMethod
+    public void pickBackupFolder(PluginCall call) {
+        Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT_TREE);
+        intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_WRITE_URI_PERMISSION | Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION);
+        startActivityForResult(call, intent, "backupFolderResult");
+    }
+
+    @ActivityCallback
+    private void backupFolderResult(PluginCall call, ActivityResult result) {
+        if (call == null) return;
+        JSObject r = new JSObject();
+        Intent data = result.getData();
+        if (result.getResultCode() == Activity.RESULT_OK && data != null && data.getData() != null) {
+            Uri tree = data.getData();
+            try {
+                getContext().getContentResolver().takePersistableUriPermission(tree, Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
+            } catch (Exception e) {
+                call.reject("DriveAtlas could not keep access to that folder. Pick another one.", "NO_FOLDER");
+                return;
+            }
+            r.put("uri", tree.toString());
+            r.put("name", treeName(tree));
+        }
+        call.resolve(r);
+    }
+
+    private Uri folderDoc(String folder) {
+        Uri tree = Uri.parse(folder);
+        return DocumentsContract.buildDocumentUriUsingTree(tree, DocumentsContract.getTreeDocumentId(tree));
+    }
+
+    @PluginMethod
+    public void writeBackup(PluginCall call) {
+        String folder = call.getString("folder");
+        String name = call.getString("name");
+        String data = call.getString("data");
+        if (folder == null || name == null || data == null || !BACKUP_NAME.matcher(name).matches()) { call.reject("Missing or unexpected backup details."); return; }
+        io.execute(() -> {
+            ContentResolver cr = getContext().getContentResolver();
+            Uri doc = null;
+            try {
+                byte[] bytes = android.util.Base64.decode(data, android.util.Base64.NO_WRAP);
+                doc = DocumentsContract.createDocument(cr, folderDoc(folder), "application/octet-stream", name);
+                if (doc == null) throw new Exception("The folder refused a new file.");
+                try (java.io.OutputStream out = cr.openOutputStream(doc, "w")) {
+                    if (out == null) throw new Exception("The file could not be opened for writing.");
+                    out.write(bytes);
+                }
+                JSObject r = new JSObject();
+                r.put("uri", doc.toString());
+                r.put("name", displayName(doc, name));
+                r.put("size", bytes.length);
+                call.resolve(r);
+            } catch (SecurityException e) {
+                call.reject("DriveAtlas can no longer use the backup folder. Choose it again in Settings.", "NO_FOLDER");
+            } catch (Exception e) {
+                if (doc != null) { try { DocumentsContract.deleteDocument(cr, doc); } catch (Exception ignored) { } }
+                call.reject("The backup could not be saved: " + e.getMessage());
+            }
+        });
+    }
+
+    @PluginMethod
+    public void listBackups(PluginCall call) {
+        String folder = call.getString("folder");
+        if (folder == null) { call.reject("No backup folder."); return; }
+        io.execute(() -> {
+            try {
+                Uri tree = Uri.parse(folder);
+                Uri children = DocumentsContract.buildChildDocumentsUriUsingTree(tree, DocumentsContract.getTreeDocumentId(tree));
+                String[] cols = { DocumentsContract.Document.COLUMN_DOCUMENT_ID, DocumentsContract.Document.COLUMN_DISPLAY_NAME,
+                    DocumentsContract.Document.COLUMN_SIZE, DocumentsContract.Document.COLUMN_LAST_MODIFIED, DocumentsContract.Document.COLUMN_MIME_TYPE };
+                JSArray files = new JSArray();
+                try (Cursor c = getContext().getContentResolver().query(children, cols, null, null, null)) {
+                    while (c != null && c.moveToNext()) {
+                        String n = c.getString(1);
+                        if (n == null || !n.toLowerCase(Locale.ROOT).endsWith(".dabackup") || DocumentsContract.Document.MIME_TYPE_DIR.equals(c.getString(4))) continue;
+                        JSObject f = new JSObject();
+                        f.put("uri", DocumentsContract.buildDocumentUriUsingTree(tree, c.getString(0)).toString());
+                        f.put("name", n);
+                        f.put("size", c.isNull(2) ? null : c.getLong(2));
+                        f.put("modified", c.isNull(3) ? null : c.getLong(3));
+                        f.put("ours", BACKUP_NAME.matcher(n).matches());
+                        files.put(f);
+                    }
+                }
+                JSObject r = new JSObject();
+                r.put("files", files);
+                call.resolve(r);
+            } catch (SecurityException e) {
+                call.reject("DriveAtlas can no longer use the backup folder. Choose it again in Settings.", "NO_FOLDER");
+            } catch (Exception e) {
+                call.reject("The backup folder could not be read: " + e.getMessage());
+            }
+        });
+    }
+
+    /** Deletes one old backup. Refuses anything that is not a file DriveAtlas named. */
+    @PluginMethod
+    public void deleteBackup(PluginCall call) {
+        String uri = call.getString("uri");
+        if (uri == null) { call.reject("No file."); return; }
+        io.execute(() -> {
+            try {
+                Uri doc = Uri.parse(uri);
+                String n = displayName(doc, null);
+                if (n == null || !BACKUP_NAME.matcher(n).matches()) { call.reject("Only DriveAtlas backups are removed."); return; }
+                DocumentsContract.deleteDocument(getContext().getContentResolver(), doc);
+                call.resolve();
+            } catch (Exception e) {
+                call.reject("The old backup could not be removed: " + e.getMessage());
+            }
+        });
+    }
+
+    /** Lets you pick a backup file anywhere Android can reach (Downloads, a USB drive, a cloud app) and reads it. */
+    @PluginMethod
+    public void openBackup(PluginCall call) {
+        Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
+        intent.addCategory(Intent.CATEGORY_OPENABLE);
+        intent.setType("*/*");
+        startActivityForResult(call, intent, "openBackupResult");
+    }
+
+    @ActivityCallback
+    private void openBackupResult(PluginCall call, ActivityResult result) {
+        if (call == null) return;
+        Intent data = result.getData();
+        if (result.getResultCode() != Activity.RESULT_OK || data == null || data.getData() == null) { call.resolve(new JSObject()); return; }
+        Uri doc = data.getData();
+        io.execute(() -> readInto(call, doc));
+    }
+
+    /** Reads a backup from the backup folder (one listed by listBackups). */
+    @PluginMethod
+    public void readBackup(PluginCall call) {
+        String uri = call.getString("uri");
+        if (uri == null) { call.reject("No file."); return; }
+        io.execute(() -> readInto(call, Uri.parse(uri)));
+    }
+
+    private void readInto(PluginCall call, Uri doc) {
+        try (java.io.InputStream in = getContext().getContentResolver().openInputStream(doc)) {
+            if (in == null) throw new Exception("The file could not be opened.");
+            java.io.ByteArrayOutputStream buf = new java.io.ByteArrayOutputStream();
+            byte[] chunk = new byte[256 * 1024];
+            long total = 0;
+            for (int n; (n = in.read(chunk)) > 0; ) {
+                total += n;
+                if (total > MAX_BACKUP) { call.reject("That file is too large to be a DriveAtlas backup from this app.", "TOO_LARGE"); return; }
+                buf.write(chunk, 0, n);
+            }
+            JSObject r = new JSObject();
+            r.put("name", displayName(doc, "backup.dabackup"));
+            r.put("size", total);
+            r.put("data", android.util.Base64.encodeToString(buf.toByteArray(), android.util.Base64.NO_WRAP));
+            call.resolve(r);
+        } catch (SecurityException e) {
+            call.reject("DriveAtlas is not allowed to read that file. Pick it again.", "NO_FOLDER");
+        } catch (OutOfMemoryError e) {
+            call.reject("That backup is too large to open on this phone.", "TOO_LARGE");
+        } catch (Exception e) {
+            call.reject("The file could not be read: " + e.getMessage());
+        }
+    }
+
+    private String displayName(Uri doc, String fallback) {
+        try (Cursor c = getContext().getContentResolver().query(doc, new String[] { android.provider.OpenableColumns.DISPLAY_NAME }, null, null, null)) {
+            if (c != null && c.moveToFirst() && !c.isNull(0)) return c.getString(0);
+        } catch (Exception ignored) { }
+        return fallback;
     }
 
     // ---------- Fingerprint ----------

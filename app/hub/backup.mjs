@@ -8,7 +8,8 @@ import os from 'node:os';
 import path from 'node:path';
 import { DATA_DIR, DB_PATH, VERSION, writeConfig } from './config.mjs';
 import { getSetting, setSetting, SCHEMA_VERSION } from './db.mjs';
-import { httpError } from './auth.mjs';
+import { httpError, passwordRecord } from './auth.mjs';
+import { DatabaseSync } from 'node:sqlite';
 import { folderPath } from './validate.mjs';
 
 const KDF = { N: 131072, r: 8, p: 1 };
@@ -98,8 +99,32 @@ export async function stageRestore(file, password) {
   const tmp = `${DB_PATH}.restore-check`;
   fs.rmSync(tmp, { force: true });
   const info = await runWorker({ op: 'restore', file, password, outFile: tmp, schemaVersion: SCHEMA_VERSION });
+  await adoptRestored(tmp, password);
   fs.renameSync(tmp, `${DB_PATH}.restore`);
   return info;
+}
+
+// A catalog from a phone backup has no PC password (phones open with a PIN) and carries phone-only details.
+// The password you just used to open the backup becomes this PC's password; phone-only settings are dropped.
+const PHONE_ONLY_SETTINGS = ['phoneLock', 'phoneLockGuard', 'phoneBiometric', 'deviceId', 'uploadedScans', 'phoneMode', 'phoneBackup'];
+async function adoptRestored(file, password) {
+  const db = new DatabaseSync(file);
+  try {
+    const owner = db.prepare('SELECT pw_hash, pw_params FROM owner WHERE id = 1').get();
+    const rec = owner && (!owner.pw_hash || !owner.pw_hash.length || owner.pw_params === 'none') ? await passwordRecord(password) : null;
+    db.exec('BEGIN');
+    try {
+      if (rec) db.prepare('UPDATE owner SET pw_salt = ?, pw_hash = ?, pw_params = ? WHERE id = 1').run(rec.salt, rec.hash, rec.params);
+      db.prepare(`DELETE FROM settings WHERE key IN (${PHONE_ONLY_SETTINGS.map(() => '?').join(', ')})`).run(...PHONE_ONLY_SETTINGS);
+      db.prepare("DELETE FROM linked_devices WHERE role = 'pc'").run();
+      db.exec('COMMIT');
+    } catch (err) {
+      db.exec('ROLLBACK');
+      throw err;
+    }
+  } finally {
+    db.close();
+  }
 }
 
 // Called at start-up, before the catalog opens: swaps in a staged restore and keeps the old catalog aside.

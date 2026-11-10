@@ -3,6 +3,7 @@ import { html, useState, useEffect, api } from '../lib.js';
 import { Card, Field, ErrorNote, Button, Icon, Lead, Pill } from '../components.js';
 import { HELP } from '../help.js';
 import { timeAgo } from '/shared/format.js';
+import { PhoneBackups } from './phone-backups.js';
 
 export function PhoneSettings({ onTheme, onSignedOut }) {
   const [s, setS] = useState(null);
@@ -20,7 +21,7 @@ export function PhoneSettings({ onTheme, onSignedOut }) {
 
   return html`<div class="page">
     <h1>Settings</h1>
-    <${Lead}>This phone, storage access, how DriveAtlas opens, linking with your PC, and how it looks.</${Lead}>
+    <${Lead}>This phone, storage access, linking with your PC, backups, how DriveAtlas opens, and how it looks.</${Lead}>
     <div class="columns">
       <div class="col-main stack-lg">
         <${Card} id="ps-phone" title="This phone">
@@ -28,6 +29,7 @@ export function PhoneSettings({ onTheme, onSignedOut }) {
         </${Card}>
         <${AccessCard} access=${p.access || {}} reload=${load} />
         <${LinkCard} link=${p.link || null} reload=${load} />
+        <${PhoneBackups} />
       </div>
       <div class="col-side stack-lg">
         <${LockCard} p=${p} reload=${load} />

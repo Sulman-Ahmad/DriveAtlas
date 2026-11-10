@@ -3,14 +3,15 @@
 import { db, getSetting, setSetting } from './db.js';
 import { plugin, readPhoneDisks, phoneMatchIds, normSerial, deviceId, phoneInfo, accessStatus } from './native.js';
 import { emit, openEvents } from './events.js';
-import { setPin, checkPin, biometricStatus, unlockWithBiometric } from './lock.js';
+import { setPin, checkPin, checkNewPin, biometricStatus, unlockWithBiometric } from './lock.js';
+import { backupStatus, setBackupPassword, chooseFolder, updateBackupSettings, backupNow, autoBackupIfDue, pickRestoreFile, restorePicked } from './backups.js';
 import { scans, deleteScanStatements } from './scanner.js';
 import { link as linkPc, unlink as unlinkPc, syncNow, startSync, currentLink, syncState } from './sync.js';
 import { DRIVE_TYPES, STATUSES, typeById, guessType, BOOT_KINDS } from '/shared/drive-types.js';
 import { advertisedFromSize } from '/shared/format.js';
 import { FLAG } from '/shared/kinds.js';
 
-export const VERSION = '0.2.0';
+export const VERSION = '0.3.0';
 export { openEvents };
 
 const HIDDEN_MASK = FLAG.HIDDEN | FLAG.SYSTEM;
@@ -360,7 +361,37 @@ async function login(body) {
     await checkPin(String(body.pin || ''));
   }
   unlocked = true;
+  backupSoon();
   return { ok: true };
+}
+
+// The daily backup runs a little after you open the app, so it never slows down unlocking.
+let backupTimer = null;
+function backupSoon() {
+  clearTimeout(backupTimer);
+  backupTimer = setTimeout(() => { if (unlocked) autoBackupIfDue(VERSION).catch(() => {}); }, 8000);
+}
+
+// Restoring replaces the whole catalog: on first start (nothing to lose yet), or when unlocked.
+async function mayRestore() {
+  if ((await owner()) && !unlocked) throw fail(401, 'Please unlock DriveAtlas.');
+}
+
+async function restore(body) {
+  await mayRestore();
+  const first = !(await owner());
+  const needPin = first || !(await getSetting('phoneLock'));
+  if (needPin) { const problem = checkNewPin(body.pin); if (problem) throw fail(400, problem); }
+  if (scans.status().active || scans.status().queue.length) throw fail(409, 'Wait for the scan to finish, or cancel it, before restoring.');
+  const info = await restorePicked(body.password);
+  if (needPin) await setPin(body.pin);
+  await deviceId();
+  if (first) {
+    await setSetting('phoneBiometric', Boolean(body.biometric) && (await biometricStatus()).available === true);
+    await setSetting('phoneMode', 'local');
+  }
+  unlocked = true;
+  return { ok: true, ...info };
 }
 
 async function settingsAll() {
@@ -415,6 +446,13 @@ on('POST', '/api/phone/link', async (c) => linkPc({ address: c.body.address, cod
 on('POST', '/api/phone/sync', async () => syncNow());
 on('POST', '/api/phone/unlink', async () => { await unlinkPc(); return { ok: true }; });
 on('POST', '/api/phone/access', async () => { const p = plugin(); if (!p) throw fail(409, 'Only in the Android app.'); return p.requestAllFilesAccess(); });
+on('GET', '/api/phone/backups', () => backupStatus());
+on('PUT', '/api/phone/backups', (c) => updateBackupSettings(c.body));
+on('POST', '/api/phone/backups/password', async (c) => { await setBackupPassword(c.body.password); return { ok: true }; });
+on('POST', '/api/phone/backups/folder', () => chooseFolder());
+on('POST', '/api/phone/backups/now', () => backupNow('manual', VERSION));
+on('POST', '/api/phone/restore/pick', async (c) => { await mayRestore(); return pickRestoreFile(typeof c.body.uri === 'string' ? c.body.uri : null); }, { open: true });
+on('POST', '/api/phone/restore', (c) => restore(c.body), { open: true });
 
 on('GET', '/api/summary', async () => {
   const drives = await liveDrives(await readPhoneDisks());
@@ -518,6 +556,7 @@ export async function startPhone() {
   document.addEventListener('visibilitychange', () => {
     if (document.hidden) hiddenAt = Date.now();
     else if (hiddenAt && Date.now() - hiddenAt > 5 * 60000 && unlocked) { unlocked = false; emit('locked', {}); }
+    else if (unlocked) backupSoon();
   });
   if (!p) return;
   let known = new Set((await readPhoneDisks({ fresh: true })).map((d) => d.key));

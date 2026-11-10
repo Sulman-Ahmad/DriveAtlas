@@ -69,6 +69,9 @@ export const HELP = {
   smartmontools: 'A free, widely used tool that reads a drive’s own health records (S.M.A.R.T.). Installing it adds power-on hours, data written, NVMe wear and bad sectors to health readings.',
   allFiles: 'Android only lets an app see whole drives with this permission. DriveAtlas uses it to record names, sizes and dates; it never opens, copies or changes your files. Without it you pick the drive or folder each time you scan.',
   phoneLock: 'The PIN and fingerprint only open DriveAtlas on this phone. The PIN is stored as a scrambled check value, never as the PIN itself, and it never leaves the phone.',
+  phoneBackups: 'A backup is one file holding your whole catalog, locked with your backup password. Save it to an SD card, a USB drive or a cloud app’s folder, so a lost phone never takes your catalog with it. DriveAtlas on your PC can restore it too.',
+  phoneBackupPassword: 'Locks every backup made from now on. You need it to restore a backup, on this phone or on your PC, and nobody can recover it for you, so keep it somewhere safe. It is separate from your PIN.',
+  phoneRestore: 'Replaces the catalog on this phone with the one in a backup file made on this phone, another phone or your PC. Your PIN and fingerprint setting stay as they are. If you use a PC, link with it again afterwards.',
   linkPc: 'Linking keeps the same catalog on this phone and your PC. Both work on their own; when they are on the same Wi-Fi they swap changes, and the phone shows up in the PC’s drive list.',
   devices: 'Link your phone once and both keep the whole catalog. When they are on the same Wi-Fi they swap changes; the phone and its storage show up in Drives here. Linking opens a Wi-Fi-only connection on this PC that answers linked devices only.',
   stop: 'DriveAtlas runs quietly in the background so it can notice drives you plug in and make daily backups. Stopping it ends that until you start it again.'

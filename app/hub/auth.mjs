@@ -20,6 +20,12 @@ function hash(password, salt, p) {
   });
 }
 
+// A fresh password hash with today's settings, for writing into a catalog (for example a restored one).
+export async function passwordRecord(password) {
+  const salt = crypto.randomBytes(16);
+  return { salt, hash: await hash(password, salt, CURRENT), params: encodeParams(CURRENT) };
+}
+
 export function httpError(status, message, extra = {}) {
   const err = new Error(message);
   err.status = status;
@@ -61,6 +67,8 @@ export async function createOwner(db, name, password) {
 export async function verifyPassword(db, password) {
   const row = db.prepare('SELECT pw_salt, pw_hash, pw_params FROM owner WHERE id = 1').get();
   if (!row || typeof password !== 'string' || password.length > 200) return false;
+  // An account restored from a phone backup has no PC password until one is set.
+  if (!row.pw_hash || !row.pw_hash.length || row.pw_params === 'none') return false;
   const params = parseParams(row.pw_params);
   const ok = crypto.timingSafeEqual(Buffer.from(row.pw_hash), await hash(password, row.pw_salt, params));
   if (ok && encodeParams(params) !== encodeParams(CURRENT)) {
