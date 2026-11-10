@@ -7,7 +7,7 @@
 **Know every drive you own, and every file on it, even when the drive is in a drawer.**
 
 A lightweight, private catalog for USB sticks, SD cards, HDDs, SSDs and NVMe drives.
-Runs on your Windows PC and your Android phone. No cloud, no hosting, no subscription.
+Use it on your Android phone alone, on your Windows PC, or both kept in sync. No cloud, no hosting, no subscription.
 
 ![Status](https://img.shields.io/badge/status-PC%20app%20ready%20%C2%B7%20Android%20next-0F766E?style=flat-square)
 ![Platforms](https://img.shields.io/badge/platforms-Windows%20%7C%20Android-334155?style=flat-square)
@@ -76,8 +76,9 @@ DriveAtlas keeps one catalog of every storage device you own. Plug a drive in on
 - Duplicate finder, scan history with changes, storage charts
 
 **Yours, everywhere**
-- Android app with a full offline copy <sub>(Phase 2)</sub>
-- Syncs with your PC over your own Wi-Fi, encrypted <sub>(Phase 2)</sub>
+- Android app that works on its own, no PC needed: its own catalog, and it records the phone’s storage, SD card and any USB drive or SSD plugged in through OTG <sub>(Phase 2)</sub>
+- Or use phone and PC together: one account, both keep the whole catalog, and they sync both ways on your Wi-Fi without draining the battery <sub>(Phase 2)</sub>
+- Your phones show up on the PC too, with their storage and file lists <sub>(Phase 2)</sub>
 - Helper mode: other Windows PCs join your catalog and scan the drives plugged into them <sub>(Phase 2)</sub>
 - One backup file restores everything on a new laptop
 - Dark and light mode on both apps
@@ -113,7 +114,7 @@ DriveAtlas keeps one catalog of every storage device you own. Plug a drive in on
 <td width="20%"><picture><source media="(prefers-color-scheme: dark)" srcset=".github/readme/19-phone-home-dark.png"><img src=".github/readme/13-phone-home.png" alt="Phone home"></picture><p align="center"><sub>Home</sub></p></td>
 <td width="20%"><picture><source media="(prefers-color-scheme: dark)" srcset=".github/readme/20-phone-drives-dark.png"><img src=".github/readme/14-phone-drives.png" alt="Phone drives list"></picture><p align="center"><sub>Drives</sub></p></td>
 <td width="20%"><picture><source media="(prefers-color-scheme: dark)" srcset=".github/readme/21-phone-drive-detail-dark.png"><img src=".github/readme/15-phone-drive-detail.png" alt="Bootable USB detail"></picture><p align="center"><sub>Bootable USB</sub></p></td>
-<td width="20%"><picture><source media="(prefers-color-scheme: dark)" srcset=".github/readme/23-phone-otg-scan-dark.png"><img src=".github/readme/17-phone-otg-scan.png" alt="Scanning a USB drive on the phone"></picture><p align="center"><sub>OTG scan</sub></p></td>
+<td width="20%"><picture><source media="(prefers-color-scheme: dark)" srcset=".github/readme/33-phone-this-phone-dark.png"><img src=".github/readme/32-phone-this-phone.png" alt="The phone’s own storage and a USB SSD plugged in through OTG"></picture><p align="center"><sub>This phone and OTG drives</sub></p></td>
 </tr>
 </table>
 
@@ -123,7 +124,7 @@ DriveAtlas keeps one catalog of every storage device you own. Plug a drive in on
 
 - **Hub on your PC.** A small Node.js process holds the catalog in a SQLite file, reads drive details through PowerShell and `smartctl`, and serves the app to this PC only (from Phase 2, also to your paired phone on your home network).
 - **App window on Windows.** The interface opens in its own Edge or Chrome app window, pinned to the Start menu. No browser tabs, no installer bloat.
-- **Android app.** The same interface packaged as an APK. It keeps a full offline copy and syncs with the hub when both are on the same Wi-Fi. Pairing is one QR scan.
+- **Android app.** The same interface packaged as an APK. It works on its own with its own catalog, or links to your PC with one QR scan; then both keep the whole catalog and sync both ways on the same Wi-Fi.
 - **Backups.** One encrypted backup file holds everything. Restore it on a new laptop and DriveAtlas comes back exactly as it was.
 
 ## Roadmap
@@ -132,7 +133,7 @@ DriveAtlas keeps one catalog of every storage device you own. Plug a drive in on
 | --- | --- | --- |
 | 0 · Design | Product and screen design for Windows and Android | Done |
 | 1 · PC app | Hub, drive catalog, plug-in and change detection, scanning, file browser, search, partitions, health, backup and restore | Done |
-| 2 · Android, helpers and sync | APK built by GitHub Actions, QR pairing, same Wi-Fi sync, offline copy, OTG scanning, helper PCs | Planned |
+| 2 · Android, helpers and sync | Android app on its own or with a PC: catalog on the phone, phone storage and OTG scanning, fingerprint or PIN, QR linking, two-way sync, APKs on GitHub Releases, then helper PCs | In progress |
 | 3 · Organize and insights | Locations and lent-out, QR labels, reminders, duplicates, scan history, charts, exports | Planned |
 
 ## Tech stack
