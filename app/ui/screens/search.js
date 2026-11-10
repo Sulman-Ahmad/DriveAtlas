@@ -1,6 +1,7 @@
 // Search: finds files and folders by name across every scanned drive.
 import { html, useState, useEffect, useRef, api } from '../lib.js';
-import { Icon, TypeTile, StatusPill, Empty, ErrorNote } from '../components.js';
+import { Icon, TypeTile, StatusPill, Empty, ErrorNote, Lead, HelpTip } from '../components.js';
+import { LEADS, HELP } from '../help.js';
 import { FileDetail } from './file-detail.js';
 import { KINDS, kindIcon } from '/shared/kinds.js';
 import { fmtBytes, fmtNumber, fmtDuration } from '/shared/format.js';
@@ -55,16 +56,17 @@ export function Search({ data, query }) {
 
   return html`<div class="page">
     <h1>Search</h1>
+    <${Lead}>${LEADS.search}</${Lead}>
     <label class="search search-big" for="search-q"><${Icon} name="search" size=${20} />
       <input id="search-q" type="search" placeholder="Search file and folder names on all your drives" value=${f.q} onInput=${set('q')} autofocus aria-label="Search files on all drives" />
       ${f.q ? html`<button type="button" class="icon-btn" aria-label="Clear search" onClick=${() => setF({ ...f, q: '' })}><${Icon} name="x" size=${16} /></button>` : null}
     </label>
     <div class="toolbar">
-      <select aria-label="Kind" value=${f.kind} onChange=${set('kind')}><option value="">Any kind</option><option value="folder">Folders</option>${KINDS.map((k) => html`<option value=${k.id}>${k.name}</option>`)}</select>
+      <select aria-label="Kind" value=${f.kind} onChange=${set('kind')}><option value="">Any kind</option><option value="folder">Folders</option>${KINDS.map((k) => html`<option value=${k.id}>${k.name}</option>`)}</select><${HelpTip} text=${HELP.kind} label="About file kinds" />
       <select aria-label="Size" value=${f.minSize} onChange=${set('minSize')}>${SIZES.map((s) => html`<option value=${s.v}>${s.name}</option>`)}</select>
       <select aria-label="Drive" value=${f.drive} onChange=${set('drive')}><option value="">All drives</option>${scannedDrives.map((d) => html`<option value=${d.id}>${d.name}</option>`)}</select>
-      <label class="check" for="search-hidden"><input id="search-hidden" type="checkbox" checked=${f.hidden} onChange=${set('hidden')} />Include hidden files</label>
-      ${res ? html`<span class="push small muted num">${fmtNumber(res.total)}${res.total >= 10000 ? '+' : ''} result${res.total === 1 ? '' : 's'} on ${groups.length} drive${groups.length === 1 ? '' : 's'} · ${fmtNumber(res.namesSearched)} names searched in ${res.tookMs} ms</span>` : null}
+      <label class="check" for="search-hidden"><input id="search-hidden" type="checkbox" checked=${f.hidden} onChange=${set('hidden')} />Include hidden files</label><${HelpTip} text=${HELP.hiddenResults} label="About hidden files" />
+      ${res ? html`<span class="push small muted num">${fmtNumber(res.total)}${res.total >= 10000 ? '+' : ''} result${res.total === 1 ? '' : 's'} on ${groups.length} drive${groups.length === 1 ? '' : 's'} · ${fmtNumber(res.namesSearched)} names searched in ${res.tookMs} ms<${HelpTip} text=${HELP.latestScan} label="Where results come from" /></span>` : null}
     </div>
     <${ErrorNote} error=${error} />
 

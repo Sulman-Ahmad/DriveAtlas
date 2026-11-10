@@ -1,6 +1,7 @@
 // The drive details form, used by Add drive and by Edit on the drive page.
 import { html, useState } from '../lib.js';
 import { Field, ErrorNote, Icon } from '../components.js';
+import { HELP } from '../help.js';
 import { DRIVE_TYPES, STATUSES } from '/shared/drive-types.js';
 
 const toGB = (bytes) => (bytes ? +(bytes / 1e9).toFixed(bytes % 1e9 === 0 ? 0 : 1) : '');
@@ -39,24 +40,24 @@ export function DriveForm({ initial = {}, showType = false, submitLabel = 'Save'
       ${type === 'other' ? html`<${Field} label="Kind" id="f-kind" hint="e.g. DVD, Blu-ray, Tape"><input id="f-kind" value=${v.other_kind} onInput=${set('other_kind')} maxlength="40" /></${Field}>` : null}
       <${Field} label="Brand" id="f-brand"><input id="f-brand" value=${v.brand} onInput=${set('brand')} maxlength="60" /></${Field}>
       <${Field} label="Model" id="f-model"><input id="f-model" value=${v.model} onInput=${set('model')} maxlength="80" /></${Field}>
-      <${Field} label="Capacity on the label (GB)" id="f-cap" hint="1 TB = 1000 GB. Usable space is worked out for you."><input id="f-cap" type="number" min="0" step="any" inputmode="decimal" value=${v.capacityGB} onInput=${set('capacityGB')} /></${Field}>
-      <${Field} label="Serial number" id="f-serial"><input id="f-serial" value=${v.serial} onInput=${set('serial')} maxlength="80" /></${Field}>
-      <${Field} label="Status" id="f-status"><select id="f-status" value=${v.status} onChange=${set('status')}>
+      <${Field} label="Capacity on the label (GB)" id="f-cap" help=${HELP.capacityLabel} hint="1 TB = 1000 GB. Usable space is worked out for you."><input id="f-cap" type="number" min="0" step="any" inputmode="decimal" value=${v.capacityGB} onInput=${set('capacityGB')} /></${Field}>
+      <${Field} label="Serial number" id="f-serial" help=${HELP.serial}><input id="f-serial" value=${v.serial} onInput=${set('serial')} maxlength="80" /></${Field}>
+      <${Field} label="Status" id="f-status" help=${HELP.status}><select id="f-status" value=${v.status} onChange=${set('status')}>
         ${STATUSES.map((s) => html`<option value=${s.id}>${s.name}</option>`)}</select></${Field}>
-      <${Field} label="Where you keep it" id="f-loc" hint="e.g. Shelf B, box 2"><input id="f-loc" value=${v.location} onInput=${set('location')} maxlength="80" /></${Field}>
+      <${Field} label="Where you keep it" id="f-loc" help=${HELP.location} hint="e.g. Shelf B, box 2"><input id="f-loc" value=${v.location} onInput=${set('location')} maxlength="80" /></${Field}>
       ${v.status === 'lent' ? html`
         <${Field} label="Lent to" id="f-lent"><input id="f-lent" value=${v.lent_to} onInput=${set('lent_to')} maxlength="60" /></${Field}>
         <${Field} label="Due back" id="f-due"><input id="f-due" type="date" value=${v.due_back} onInput=${set('due_back')} /></${Field}>` : null}
-      <${Field} label="Tags" id="f-tags" hint="Separate with commas"><input id="f-tags" value=${v.tagsText} onInput=${set('tagsText')} maxlength="200" /></${Field}>
+      <${Field} label="Tags" id="f-tags" help=${HELP.tags} hint="Separate with commas"><input id="f-tags" value=${v.tagsText} onInput=${set('tagsText')} maxlength="200" /></${Field}>
     </div>
     <${Field} label="Notes" id="f-notes"><textarea id="f-notes" rows="3" value=${v.notes} onInput=${set('notes')} maxlength="2000"></textarea></${Field}>
 
     <button type="button" class="disclosure" aria-expanded=${specs} onClick=${() => setSpecs(!specs)}><${Icon} name=${specs ? 'down' : 'right'} size=${16} />Specs (optional)</button>
     ${specs ? html`<div class="form-grid">
-      <${Field} label="Interface" id="f-if" hint="e.g. USB 3.2 Gen 2, PCIe 4.0 x4"><input id="f-if" value=${v.interface} onInput=${set('interface')} maxlength="60" /></${Field}>
-      <${Field} label="Speed class" id="f-class" hint="SD cards: e.g. U3, V30, A2"><input id="f-class" value=${v.speed_class} onInput=${set('speed_class')} maxlength="30" /></${Field}>
-      <${Field} label="Rated read (MB/s)" id="f-read"><input id="f-read" type="number" min="0" value=${v.rated_read_mbs} onInput=${set('rated_read_mbs')} /></${Field}>
-      <${Field} label="Rated write (MB/s)" id="f-write"><input id="f-write" type="number" min="0" value=${v.rated_write_mbs} onInput=${set('rated_write_mbs')} /></${Field}>
+      <${Field} label="Interface" id="f-if" help=${HELP.interface} hint="e.g. USB 3.2 Gen 2, PCIe 4.0 x4"><input id="f-if" value=${v.interface} onInput=${set('interface')} maxlength="60" /></${Field}>
+      <${Field} label="Speed class" id="f-class" help=${HELP.speedClass} hint="SD cards: e.g. U3, V30, A2"><input id="f-class" value=${v.speed_class} onInput=${set('speed_class')} maxlength="30" /></${Field}>
+      <${Field} label="Rated read (MB/s)" id="f-read" help=${HELP.ratedSpeed}><input id="f-read" type="number" min="0" value=${v.rated_read_mbs} onInput=${set('rated_read_mbs')} /></${Field}>
+      <${Field} label="Rated write (MB/s)" id="f-write" help=${HELP.ratedSpeed}><input id="f-write" type="number" min="0" value=${v.rated_write_mbs} onInput=${set('rated_write_mbs')} /></${Field}>
     </div>` : null}
 
     <button type="button" class="disclosure" aria-expanded=${more} onClick=${() => setMore(!more)}><${Icon} name=${more ? 'down' : 'right'} size=${16} />More details: purchase and warranty</button>

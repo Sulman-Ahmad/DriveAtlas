@@ -18,6 +18,15 @@ Runs on your Windows PC and your Android phone. No cloud, no hosting, no subscri
 
 </div>
 
+<br>
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset=".github/readme/07-pc-home-dark.png">
+  <img src=".github/readme/01-pc-home.png" alt="DriveAtlas home screen on Windows: storage summary, connected drives, alerts and recent scans">
+</picture>
+
+<p align="center"><sub>The Windows app. It follows your system theme; GitHub shows the dark version if your GitHub theme is dark.</sub></p>
+
 ## Why DriveAtlas
 
 If you own a drawer full of drives, you know the problem: *which one has the 2019 wedding videos? Is that old laptop HDD still healthy? Did I lend the T7 to someone?*
@@ -72,12 +81,45 @@ DriveAtlas keeps one catalog of every storage device you own. Plug a drive in on
 - Helper mode: other Windows PCs join your catalog and scan the drives plugged into them <sub>(Phase 2)</sub>
 - One backup file restores everything on a new laptop
 - Dark and light mode on both apps
+- Built-in help: a short introduction on first run, a line on every screen saying what it is for, and (?) tips that explain terms like partitions, S.M.A.R.T. or fingerprints
 
 </td>
 </tr>
 </table>
 
+## Screenshots
+
+### Windows
+
+<table>
+<tr>
+<td colspan="2"><picture><source media="(prefers-color-scheme: dark)" srcset=".github/readme/27-pc-welcome-dark.png"><img src=".github/readme/26-pc-welcome.png" alt="Welcome screen: what DriveAtlas does and how it works"></picture><p align="center"><sub>First run: what DriveAtlas does, in plain words</sub></p></td>
+</tr>
+<tr>
+<td width="50%"><picture><source media="(prefers-color-scheme: dark)" srcset=".github/readme/08-pc-drives-dark.png"><img src=".github/readme/02-pc-drives.png" alt="Drives grouped by status"></picture><p align="center"><sub>Drives, grouped by status</sub></p></td>
+<td width="50%"><picture><source media="(prefers-color-scheme: dark)" srcset=".github/readme/09-pc-drive-detail-dark.png"><img src=".github/readme/03-pc-drive-detail.png" alt="Drive detail with partitions and health"></picture><p align="center"><sub>Drive detail: partitions and health</sub></p></td>
+</tr>
+<tr>
+<td width="50%"><picture><source media="(prefers-color-scheme: dark)" srcset=".github/readme/10-pc-search-dark.png"><img src=".github/readme/04-pc-search.png" alt="Search across all drives"></picture><p align="center"><sub>Search across all drives</sub></p></td>
+<td width="50%"><picture><source media="(prefers-color-scheme: dark)" srcset=".github/readme/12-pc-scan-dark.png"><img src=".github/readme/06-pc-scan.png" alt="Scanning a drive"></picture><p align="center"><sub>Scanning a drive</sub></p></td>
+</tr>
+</table>
+
+### Android
+
+<table>
+<tr>
+<td width="20%"><picture><source media="(prefers-color-scheme: dark)" srcset=".github/readme/29-phone-welcome-dark.png"><img src=".github/readme/28-phone-welcome.png" alt="Phone welcome screen"></picture><p align="center"><sub>Welcome</sub></p></td>
+<td width="20%"><picture><source media="(prefers-color-scheme: dark)" srcset=".github/readme/19-phone-home-dark.png"><img src=".github/readme/13-phone-home.png" alt="Phone home"></picture><p align="center"><sub>Home</sub></p></td>
+<td width="20%"><picture><source media="(prefers-color-scheme: dark)" srcset=".github/readme/20-phone-drives-dark.png"><img src=".github/readme/14-phone-drives.png" alt="Phone drives list"></picture><p align="center"><sub>Drives</sub></p></td>
+<td width="20%"><picture><source media="(prefers-color-scheme: dark)" srcset=".github/readme/21-phone-drive-detail-dark.png"><img src=".github/readme/15-phone-drive-detail.png" alt="Bootable USB detail"></picture><p align="center"><sub>Bootable USB</sub></p></td>
+<td width="20%"><picture><source media="(prefers-color-scheme: dark)" srcset=".github/readme/23-phone-otg-scan-dark.png"><img src=".github/readme/17-phone-otg-scan.png" alt="Scanning a USB drive on the phone"></picture><p align="center"><sub>OTG scan</sub></p></td>
+</tr>
+</table>
+
 ## How it works
+
+<img src=".github/readme/architecture.png" alt="The laptop hub holds the catalog; the phone syncs a full copy on your Wi-Fi">
 
 - **Hub on your PC.** A small Node.js process holds the catalog in a SQLite file, reads drive details through PowerShell and `smartctl`, and serves the app to this PC only (from Phase 2, also to your paired phone on your home network).
 - **App window on Windows.** The interface opens in its own Edge or Chrome app window, pinned to the Start menu. No browser tabs, no installer bloat.

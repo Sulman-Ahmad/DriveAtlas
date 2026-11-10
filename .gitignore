@@ -11,6 +11,7 @@
 !/DriveAtlas.vbs
 !/DriveAtlas.cmd
 !/app/
+!/.github/
 
 # 2. Inside app/, allow only what runs.
 /app/*
@@ -23,7 +24,11 @@
 /app/scripts/*
 !/app/scripts/install.ps1
 
-# 3. Never publish these, even inside the folders above.
+# 3. Inside .github/, allow only the pictures the README shows.
+/.github/*
+!/.github/readme/
+
+# 4. Never publish these, even inside the folders above.
 *.md
 !/README.md
 !/LICENSE.md

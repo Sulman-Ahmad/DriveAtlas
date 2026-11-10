@@ -1,6 +1,7 @@
 // Drive page: details, partitions, changes to review, edit and delete.
 import { html, useState, useEffect, api, go } from '../lib.js';
-import { Icon, Card, TypeTile, StatusPill, HealthPill, BootPill, CapacityBar, UsageLine, Button, Pill, ErrorNote, NO_HEALTH_TYPES } from '../components.js';
+import { Icon, Card, TypeTile, StatusPill, HealthPill, BootPill, CapacityBar, UsageLine, Button, Pill, ErrorNote, NO_HEALTH_TYPES, HelpTip } from '../components.js';
+import { HELP } from '../help.js';
 import { DriveForm } from './drive-form.js';
 import { typeById, BOOT_KINDS, statusName } from '/shared/drive-types.js';
 import { fmtBytes, fmtAdvertised, fmtDate, fmtNumber, timeAgo } from '/shared/format.js';
@@ -57,7 +58,7 @@ export function DrivePage({ id, data, onChanged }) {
         <h1>${d.name}</h1>
         <div class="muted">${brandModel || kind} · ${kind}${d.advertised_bytes ? ` · ${fmtAdvertised(d.advertised_bytes)}` : ''}${d.actual_bytes ? ` (${fmtBytes(d.actual_bytes)} usable)` : ''}</div>
         <div class="pills"><${StatusPill} drive=${d} /><${HealthPill} health=${d.health_status} type=${d.type} state=${d.health_state} pct=${d.health_pct} /><${BootPill} kind=${boot} />
-          ${d.label_code ? html`<${Pill} tone="plain" icon="qr">${d.label_code}</${Pill}>` : null}</div>
+          ${d.label_code ? html`<span class="pill-help"><${Pill} tone="plain" icon="qr">${d.label_code}</${Pill}><${HelpTip} text=${HELP.labelCode} label="About the label code" /></span>` : null}</div>
       </div>
       ${mode === 'view' ? html`<div class="actions">
         ${d.connected ? html`<${Button} kind="primary" icon="scan" disabled=${busy} onClick=${scanNow}>${state.scans.length ? 'Scan again' : 'Scan now'}</${Button}>` : null}
@@ -81,12 +82,12 @@ export function DrivePage({ id, data, onChanged }) {
     <div class="columns">
       <div class="col-main stack-lg">
         ${mode === 'view' && error ? html`<${ErrorNote} error=${error} />` : null}
-        <${Card} id="h-space" title="Space">
+        <${Card} id="h-space" title="Space" help=${HELP.space}>
           <${CapacityBar} used=${d.used} total=${d.total} thick />
           <div class="mt6"><${UsageLine} used=${d.used} total=${d.total} /></div>
           <p class="small muted">${d.connected ? 'Live from Windows right now.' : `Last seen ${timeAgo(d.last_seen_at)}.`}</p>
         </${Card}>
-        <${Card} id="h-files" title="Files" extra=${state.scans.length ? html`<a class="link push small" href=${`#/files/${d.id}`}>Browse files</a>` : null}>
+        <${Card} id="h-files" title="Files" help=${HELP.files} extra=${state.scans.length ? html`<a class="link push small" href=${`#/files/${d.id}`}>Browse files</a>` : null}>
           ${state.scans.length ? html`<div class="stack-sm">${state.scans.map((s) => html`<a class="scan-line" href=${`#/files/${d.id}?scan=${s.id}&dir=0`}>
               <${Icon} name="folder" size=${18} /><strong>${s.partition_label || `Partition ${s.partition_idx}`}</strong>
               <span class="muted small num">${fmtNumber(s.file_count)} files · ${fmtNumber(s.folder_count)} folders · ${fmtBytes(s.total_bytes)} · scanned ${timeAgo(s.finished_at)}</span>
@@ -94,9 +95,9 @@ export function DrivePage({ id, data, onChanged }) {
           : html`<p class="small muted mt0">${d.connected ? 'Not scanned yet. Scan it to record its folders and files; nothing is copied.' : 'Not scanned yet. Plug it in to scan it.'}</p>`}
         </${Card}>
         <${HealthSection} d=${d} history=${state.health} onRead=${async () => { await onChanged(); await load(); }} />
-        <${Card} id="h-parts" title="Partitions" extra=${html`<span class="muted small">${d.partition_style || ''}${d.partitions.length ? ` · ${d.partitions.length}` : ''}</span>`}>
+        <${Card} id="h-parts" title="Partitions" help=${HELP.partitions} extra=${html`<span class="muted small">${d.partition_style || ''}${d.partitions.length ? ` · ${d.partitions.length}` : ''}</span>`}>
           ${d.partitions.length ? html`<div class="table-wrap"><table class="table">
-            <thead><tr><th>#</th><th>Name</th><th>File system</th><th>Size</th><th>Used</th><th>Notes</th></tr></thead>
+            <thead><tr><th>#</th><th>Name</th><th>File system<${HelpTip} text=${HELP.fileSystem} label="About file systems" /></th><th>Size</th><th>Used</th><th>Notes</th></tr></thead>
             <tbody>${d.partitions.map((p) => html`<tr>
               <td class="muted">${p.idx}</td>
               <td><strong>${p.label || partName(p)}</strong>${p.last_letter ? html` <span class="muted">${p.last_letter}:</span>` : null}</td>
@@ -117,7 +118,7 @@ export function DrivePage({ id, data, onChanged }) {
             ${row('Connection', [d.bus, d.media].filter(Boolean).join(', '))}
             ${row('Interface', d.interface)}
             ${row('Speed', d.rated_read_mbs || d.rated_write_mbs ? `${d.rated_read_mbs || '?'} / ${d.rated_write_mbs || '?'} MB/s` : d.speed_class)}
-            ${row('Bootable', boot ? BOOT_KINDS[boot] : null)}
+            ${row(html`Bootable<${HelpTip} text=${HELP.bootable} label="About bootable drives" />`, boot ? BOOT_KINDS[boot] : null)}
             ${row('Added', fmtDate(d.created_at))}
             ${row('Last seen', d.connected ? 'Connected now' : timeAgo(d.last_seen_at))}
           </dl>
@@ -157,7 +158,7 @@ function ChangesPanel({ drive, connected, onDone }) {
 
   return html`<section class="card card-accent" aria-labelledby="h-changes">
     <div class="card-head"><span class="tile tile-accent"><${Icon} name="sync" size=${18} /></span>
-      <div><h2 id="h-changes">Changes found when this drive was plugged in</h2><div class="small muted">Nothing is changed until you choose Update record.</div></div></div>
+      <div><h2 id="h-changes">Changes found when this drive was plugged in<${HelpTip} text=${HELP.changes} label="About change detection" /></h2><div class="small muted">Nothing is changed until you choose Update record.</div></div></div>
     <div class="card-body stack-sm">
       <ul class="change-list">${changes.map((c) => html`<li><${Icon} name="right" size=${14} />${c.text}</li>`)}</ul>
       ${suggestion ? html`<label class="check" for="chg-status"><input id="chg-status" type="checkbox" checked=${useStatus} onChange=${(e) => setUseStatus(e.target.checked)} />${suggestion.suggestText}</label>` : null}
@@ -184,7 +185,7 @@ function HealthSection({ d, history, onRead }) {
   }
 
   const stat = (label, value) => (value == null ? null : html`<div class="mini-stat"><span>${label}</span><strong>${value}</strong></div>`);
-  return html`<${Card} id="h-health" title="Health" extra=${last ? html`<span class="muted small push">Read ${timeAgo(last.taken_at)} · ${last.source === 'smartctl' ? 'smartctl' : 'Windows'}</span>` : null}>
+  return html`<${Card} id="h-health" title="Health" help=${HELP.health} extra=${last ? html`<span class="muted small push">Read ${timeAgo(last.taken_at)} · ${last.source === 'smartctl' ? 'smartctl' : 'Windows'}</span><${HelpTip} text=${HELP.healthSource} label="Where health readings come from" />` : null}>
     ${last ? html`<div class="stack">
       <div class="health-head">
         <span class=${`health-big health-${last.status || 'none'}`}>${last.health_pct != null ? `${Math.round(last.health_pct)}%` : '—'}</span>

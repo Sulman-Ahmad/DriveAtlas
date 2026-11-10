@@ -1,6 +1,7 @@
 // Add drive: pick the type, fill in details. Detected drives come pre-filled.
 import { html, useState, api, go } from '../lib.js';
-import { Icon, Card, TypeTile, HealthPill } from '../components.js';
+import { Icon, Card, TypeTile, HealthPill, Lead } from '../components.js';
+import { LEADS } from '../help.js';
 import { DriveForm } from './drive-form.js';
 import { DRIVE_TYPES, BOOT_KINDS } from '/shared/drive-types.js';
 import { fmtBytes, fmtAdvertised } from '/shared/format.js';
@@ -31,6 +32,7 @@ export function AddDrive({ data, query, onSaved }) {
   return html`<div class="page">
     <nav class="crumbs" aria-label="Breadcrumb"><a href="#/drives">Drives</a><${Icon} name="right" size=${14} /><span>Add drive</span></nav>
     <h1>Add drive</h1>
+    <${Lead}>${LEADS.add}</${Lead}>
     <div class="columns">
       <div class="col-main stack-lg">
         <${Card} id="h-type" title="What kind of drive is it?">

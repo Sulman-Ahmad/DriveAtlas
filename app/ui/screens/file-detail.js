@@ -1,6 +1,7 @@
 // Details of one file or folder, used by Search and Files.
 import { html, useState, useEffect, api } from '../lib.js';
-import { Icon, Button, StatusPill, ErrorNote } from '../components.js';
+import { Icon, Button, StatusPill, ErrorNote, HelpTip } from '../components.js';
+import { HELP } from '../help.js';
 import { kindName, kindIcon } from '/shared/kinds.js';
 import { fmtBytes, fmtNumber, fmtDuration, fmtCameraDate, fmtDateTime, fmtDate } from '/shared/format.js';
 
@@ -40,7 +41,7 @@ export function FileDetail({ entryId, data, showFolderLink = true }) {
         ${entry.duration_s ? html`<dt>Duration</dt><dd>${fmtDuration(entry.duration_s)}</dd>` : null}
         ${entry.taken_at ? html`<dt>Taken</dt><dd>${fmtCameraDate(entry.taken_at)}</dd>` : null}
         <dt>Modified</dt><dd>${fmtDateTime(entry.modified_at)}</dd>
-        ${entry.fingerprint ? html`<dt>Fingerprint</dt><dd class="mono">${entry.fingerprint.slice(0, 4)}…${entry.fingerprint.slice(-4)}</dd>` : null}
+        ${entry.fingerprint ? html`<dt>Fingerprint<${HelpTip} text=${HELP.fingerprint} label="About fingerprints" /></dt><dd class="mono">${entry.fingerprint.slice(0, 4)}…${entry.fingerprint.slice(-4)}</dd>` : null}
       </dl>
       <div class="path-box mono">${entry.path}</div>
       ${drive ? html`<div class="where">
@@ -50,7 +51,7 @@ export function FileDetail({ entryId, data, showFolderLink = true }) {
         <div class="small muted">Scanned ${fmtDate(entry.scanned_at)}.${drive.connected ? '' : ' Plug the drive in to open the file.'}</div>
       </div>` : null}
       ${!entry.is_dir ? html`<div class="small">${entry.copies.length
-        ? html`<span class="eyebrow">Also stored on</span><ul class="copies">${entry.copies.map((c) => {
+        ? html`<span class="eyebrow">Also stored on<${HelpTip} text=${HELP.copies} label="How copies are found" /></span><ul class="copies">${entry.copies.map((c) => {
             const d = data.drives.find((x) => x.id === c.drive_id);
             return html`<li><strong>${d ? d.name : 'Another drive'}</strong> <span class="mono muted">${c.path}</span></li>`;
           })}</ul>`

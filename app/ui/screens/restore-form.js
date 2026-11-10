@@ -1,6 +1,7 @@
 // Restore from a backup file. Used on the first screen and in Settings.
 import { html, useState, api } from '../lib.js';
 import { Field, ErrorNote, Icon } from '../components.js';
+import { HELP } from '../help.js';
 
 // Waits for the hub to come back after it restarts, then reloads the window.
 async function waitForHub() {
@@ -64,7 +65,7 @@ export function RestoreForm({ needsCurrentPassword = false }) {
       </div>
       <span class="field-hint">${path ? html`Chosen: <span class="mono">${path}</span>` : 'A file named like DriveAtlas-backup-2026-11-10-0930.dabackup'}</span>
     </div>
-    <${Field} label="Password the backup was made with" id="rs-pw"><input id="rs-pw" type="password" autocomplete="off" value=${pw} onInput=${(e) => setPw(e.target.value)} required maxlength="200" /></${Field}>
+    <${Field} label="Password the backup was made with" id="rs-pw" help=${HELP.backupPassword}><input id="rs-pw" type="password" autocomplete="off" value=${pw} onInput=${(e) => setPw(e.target.value)} required maxlength="200" /></${Field}>
     ${needsCurrentPassword ? html`<${Field} label="Your current password" id="rs-cur" hint="Confirms it is you. Your current catalog is replaced, but kept as a safety copy.">
       <input id="rs-cur" type="password" autocomplete="current-password" value=${current} onInput=${(e) => setCurrent(e.target.value)} required maxlength="200" /></${Field}>` : null}
     <${ErrorNote} error=${error} />

@@ -1,6 +1,7 @@
 // Settings: account, backups, catalog folder, drive health tools, appearance.
 import { html, useState, useEffect, api } from '../lib.js';
-import { Card, Field, ErrorNote, Button, Icon } from '../components.js';
+import { Card, Field, ErrorNote, Button, Icon, Lead, HelpTip } from '../components.js';
+import { LEADS, HELP } from '../help.js';
 import { RestoreForm, waitForHub } from './restore-form.js';
 import { fmtBytes, fmtDateTime, timeAgo } from '/shared/format.js';
 
@@ -13,10 +14,11 @@ export function Settings({ onTheme, onSignedOut, onStopped }) {
 
   return html`<div class="page">
     <h1>Settings</h1>
+    <${Lead}>${LEADS.settings}</${Lead}>
     <div class="columns">
       <div class="col-main stack-lg">
         <${BackupCard} s=${s} reload=${load} />
-        <${Card} id="h-restore" title="Restore from a backup">
+        <${Card} id="h-restore" title="Restore from a backup" help=${HELP.restore}>
           <p class="small muted mt0">Brings back a catalog exactly as it was when the backup was made. Use it on a new laptop, or to undo a mistake.</p>
           <${RestoreForm} needsCurrentPassword />
         </${Card}>
@@ -37,6 +39,7 @@ export function Settings({ onTheme, onSignedOut, onStopped }) {
             <div class="kv-row"><dt>Catalog</dt><dd class="mono small break">${s.dataDir}</dd></div>
             <div class="kv-row"><dt>Log file</dt><dd class="mono small break">${s.logPath}</dd></div>
           </dl>
+          <div class="card-body about-intro"><a class="link" href="#/about">What DriveAtlas does and how to use it</a></div>
           <${StopHub} onStopped=${onStopped} />
         </${Card}>
       </div>
@@ -85,7 +88,7 @@ function BackupCard({ s, reload }) {
   }
 
   const last = s.recentBackups.find((b) => b.status === 'ok');
-  return html`<${Card} id="h-backup" title="Backups">
+  return html`<${Card} id="h-backup" title="Backups" help=${HELP.backups}>
     <div class="stack">
       <p class="small muted mt0">Each backup is one file holding your whole catalog and account, encrypted with your password (AES-256-GCM). Keep it on another drive or in a cloud folder; it is safe to store there.</p>
       ${!s.backupKeyReady ? html`<p class="callout callout-warn small">Sign out and sign in once so DriveAtlas can prepare your backup key.</p>` : null}
@@ -104,7 +107,7 @@ function BackupCard({ s, reload }) {
         <select id="bk-keep" value=${s.backup.keep} onChange=${(e) => save({ keep: Number(e.target.value) })}>${[3, 7, 14, 30].map((n) => html`<option value=${n}>${n} backups</option>`)}</select></label>
       <div class="actions">
         <${Button} kind="primary" icon="download" disabled=${busy || !s.backup.folder || !s.backupKeyReady} onClick=${now}>Back up now</${Button}>
-        <a class="btn btn-secondary" href="/api/backup/download" download><${Icon} name="download" size=${17} />Download a backup</a>
+        <a class="btn btn-secondary" href="/api/backup/download" download><${Icon} name="download" size=${17} />Download a backup</a><${HelpTip} text=${HELP.downloadBackup} label="About downloading a backup" />
       </div>
       ${msg ? html`<p class="small muted break" role="status">${msg}</p>` : null}
       <${ErrorNote} error=${error} />
@@ -128,7 +131,7 @@ function FolderCard({ s }) {
       waitForHub();
     } catch (e) { setError(e.message); setBusy(''); }
   }
-  return html`<${Card} id="h-folder" title="Catalog folder">
+  return html`<${Card} id="h-folder" title="Catalog folder" help=${HELP.catalogFolder}>
     <div class="stack-sm">
       <div class="mono small break">${s.dataDir}</div>
       <p class="small muted mt0">Move the catalog to another drive if your Windows drive is small. DriveAtlas copies it into a new "DriveAtlas Data" folder that only your account can open, then restarts. The old copy stays where it is until you delete it.</p>
@@ -184,11 +187,11 @@ function HealthCard({ s, reload }) {
     setError('');
     try { await api('POST', '/api/health/install-smartctl'); setMsg('An install window opened. Follow it, then come back and press Refresh.'); } catch (e) { setError(e.message); }
   }
-  return html`<${Card} id="h-health" title="Drive health">
+  return html`<${Card} id="h-health" title="Drive health" help=${HELP.health}>
     <div class="stack-sm small">
       <p class="muted mt0">Windows only shares wear, temperature and error counts with administrator permission, so each reading shows a Windows prompt. Nothing on your drives is changed.</p>
       <div>${s.smartctl ? html`<span class="inline"><${Icon} name="check" size=${16} />smartctl found: <span class="mono break">${s.smartctl}</span></span>`
-        : html`<span>For full details (bad sectors, total written, NVMe wear), install the free smartmontools tool.</span>`}</div>
+        : html`<span>For full details (bad sectors, total written, NVMe wear), install the free smartmontools tool.<${HelpTip} text=${HELP.smartmontools} label="About smartmontools" /></span>`}</div>
       ${msg ? html`<p class="muted" role="status">${msg}</p>` : null}
       <${ErrorNote} error=${error} />
       <div class="actions">

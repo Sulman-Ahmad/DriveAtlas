@@ -1,6 +1,7 @@
 // Home: totals, drives connected right now, and what needs attention.
 import { html, go } from '../lib.js';
-import { Icon, TypeTile, Card, CapacityBar, HealthPill, Pill, LinkButton, Empty, healthInfo } from '../components.js';
+import { Icon, TypeTile, Card, CapacityBar, HealthPill, Pill, LinkButton, Empty, healthInfo, Lead, HelpTip } from '../components.js';
+import { LEADS, HELP } from '../help.js';
 import { fmtBytes, percent } from '/shared/format.js';
 
 export function Home({ data }) {
@@ -31,13 +32,14 @@ export function Home({ data }) {
       </form>
       <${LinkButton} kind="primary" icon="plus" href="#/add">Add drive</${LinkButton}>
     </header>
+    <${Lead}>${LEADS.home}${!c.total ? html` <a class="link" href="#/about">New here? See what DriveAtlas does.</a>` : null}</${Lead}>
 
     <section class="card summary" aria-label="Storage summary">
       <div class="stats">
         <div class="stat"><span class="stat-label">Drives</span><span class="stat-value">${c.total}</span>
           <span class="stat-sub">${[c.inpc && `${c.inpc} in PC`, c.plugged && `${c.plugged} plugged in`, c.stored && `${c.stored} stored`, c.lent && `${c.lent} lent`].filter(Boolean).join(' · ') || 'Add your first drive'}</span></div>
-        <div class="stat"><span class="stat-label">Capacity</span><span class="stat-value">${fmtBytes(s.capacity)}</span><span class="stat-sub">across your drives</span></div>
-        <div class="stat"><span class="stat-label">Used</span><span class="stat-value">${fmtBytes(s.used)}</span><span class="stat-sub">${percent(s.used, s.capacity)}% of capacity</span></div>
+        <div class="stat"><span class="stat-label">Capacity<${HelpTip} text=${HELP.capacity} label="About Capacity" /></span><span class="stat-value">${fmtBytes(s.capacity)}</span><span class="stat-sub">across your drives</span></div>
+        <div class="stat"><span class="stat-label">Used<${HelpTip} text=${HELP.used} label="About Used" /></span><span class="stat-value">${fmtBytes(s.used)}</span><span class="stat-sub">${percent(s.used, s.capacity)}% of capacity</span></div>
         <div class="stat"><span class="stat-label">Free</span><span class="stat-value">${fmtBytes(s.free)}</span><span class="stat-sub">${s.overNinety ? `${s.overNinety} drive${s.overNinety > 1 ? 's' : ''} over 90% full` : 'No drive over 90% full'}</span></div>
       </div>
       <${CapacityBar} used=${s.used} total=${s.capacity} thick />
@@ -45,14 +47,14 @@ export function Home({ data }) {
 
     <div class="columns">
       <div class="col-main">
-        <${Card} id="h-connected" title="Connected now" pad=${false} extra=${html`<span class="muted small">${connected.length} ${connected.length === 1 ? 'drive' : 'drives'}</span><a class="link push" href="#/drives">View all drives</a>`}>
+        <${Card} id="h-connected" title="Connected now" help=${HELP.connectedNow} pad=${false} extra=${html`<span class="muted small">${connected.length} ${connected.length === 1 ? 'drive' : 'drives'}</span><a class="link push" href="#/drives">View all drives</a>`}>
           ${!data.ready ? html`<p class="card-body muted">Reading your drives…</p>` : null}
           ${data.ready && !connected.length ? html`<div class="card-body"><${Empty} title="No drives detected">Plug in a drive and it appears here within a few seconds.</${Empty}></div>` : null}
           ${connected.map((d) => html`<${ConnectedRow} d=${d} drive=${drives.find((x) => x.id === d.driveId)} key=${d.key} />`)}
         </${Card}>
       </div>
       <div class="col-side">
-        <${Card} id="h-attention" title="Needs attention" pad=${false} extra=${attention.length ? html`<span class="count count-warn push">${attention.length}</span>` : null}>
+        <${Card} id="h-attention" title="Needs attention" help=${HELP.attention} pad=${false} extra=${attention.length ? html`<span class="count count-warn push">${attention.length}</span>` : null}>
           ${!attention.length ? html`<div class="card-body"><${Empty} icon="check" title="All good">Nothing needs your attention right now.</${Empty}></div>` : null}
           ${attention.map((a) => html`<div class="row">
             <span class=${`tile tile-${a.tone}`}><${Icon} name=${a.icon} size=${18} /></span>

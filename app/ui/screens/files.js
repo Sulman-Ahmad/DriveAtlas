@@ -1,6 +1,7 @@
 // Files: browse a drive's folders from its latest scan, plugged in or not.
 import { html, useState, useEffect, api, go } from '../lib.js';
-import { Icon, Pill, Empty, ErrorNote, Button } from '../components.js';
+import { Icon, Pill, Empty, ErrorNote, Button, Lead } from '../components.js';
+import { LEADS } from '../help.js';
 import { FileDetail } from './file-detail.js';
 import { kindName, kindIcon } from '/shared/kinds.js';
 import { fmtBytes, fmtNumber, fmtDate, fmtDateTime } from '/shared/format.js';
@@ -49,6 +50,7 @@ export function Files({ driveId, data, query }) {
       ${drive.connected ? html`<${Pill} tone="good" dot>Connected${drive.letters.length ? ` as ${drive.letters.map((l) => `${l}:`).join(' ')}` : ''}</${Pill}>` : html`<${Pill} tone="muted" icon="pin">Offline · ${drive.location || 'not plugged in'}</${Pill}>`}
       ${drive.connected ? html`<${Button} icon="scan" disabled=${busy} onClick=${scanNow}>${scan ? 'Scan again' : 'Scan now'}</${Button}>` : null}
     </header>
+    <${Lead}>${LEADS.files}</${Lead}>
     <${ErrorNote} error=${error} />
 
     ${res && !scan ? html`<div class="card card-body"><${Empty} icon="scan" title="This drive has not been scanned yet">${drive.connected ? 'Scan it to record its folders and files. Nothing is copied: only names, sizes and dates.' : 'Plug it in and scan it to record its folders and files.'}</${Empty}></div>` : null}

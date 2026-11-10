@@ -1,7 +1,7 @@
 // App root: sign-in gate, sidebar, routing, live updates and plug-in toasts.
 import { html, render, useState, useEffect, useRef, api } from './lib.js';
 import { Icon } from './components.js';
-import { Setup, Login } from './screens/welcome.js';
+import { Setup, Login, AboutPage } from './screens/welcome.js';
 import { Home } from './screens/home.js';
 import { Drives } from './screens/drives.js';
 import { AddDrive } from './screens/add.js';
@@ -133,6 +133,7 @@ function Main({ state, onSignedOut, onStopped, onTheme }) {
   else if (route.name === 'search') screen = html`<${Search} data=${data} query=${route.query} />`;
   else if (route.name === 'files' && route.id) screen = html`<${Files} driveId=${route.id} data=${data} query=${route.query} />`;
   else if (route.name === 'scan') screen = html`<${Scan} data=${data} />`;
+  else if (route.name === 'about') screen = html`<${AboutPage} />`;
   else if (route.name === 'settings') screen = html`<${Settings} onTheme=${setTheme} onSignedOut=${onSignedOut} onStopped=${onStopped} />`;
   else screen = html`<${Home} data=${data} />`;
 

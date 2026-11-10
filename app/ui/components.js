@@ -1,5 +1,5 @@
 // Building blocks shared by every screen.
-import { html } from './lib.js';
+import { html, useState, useEffect, useLayoutEffect, useMemo, useRef } from './lib.js';
 import { Icon } from './icons.js';
 import { typeById, statusName, BOOT_KINDS } from '/shared/drive-types.js';
 import { fmtBytes, percent } from '/shared/format.js';
@@ -73,9 +73,9 @@ export function LinkButton({ kind = 'secondary', icon, href, children }) {
   return html`<a class=${`btn btn-${kind}`} href=${href}>${icon ? html`<${Icon} name=${icon} size=${17} />` : null}${children}</a>`;
 }
 
-export function Card({ title, extra, children, pad = true, id }) {
+export function Card({ title, help, extra, children, pad = true, id }) {
   return html`<section class="card" aria-labelledby=${id}>
-    ${title ? html`<div class="card-head"><h2 id=${id}>${title}</h2>${extra}</div>` : null}
+    ${title ? html`<div class="card-head"><h2 id=${id}>${title}</h2>${help ? html`<${HelpTip} text=${help} label=${`About ${title}`} />` : null}${extra}</div>` : null}
     <div class=${pad ? 'card-body' : ''}>${children}</div>
   </section>`;
 }
@@ -84,11 +84,68 @@ export function Empty({ icon = 'drives', title, children }) {
   return html`<div class="empty"><span class="tile"><${Icon} name=${icon} size=${22} /></span><div><strong>${title}</strong><p class="muted">${children}</p></div></div>`;
 }
 
-export function Field({ label, hint, children, id }) {
+// With `help`, the label sits next to a (?) tip; the tip stays outside the <label> so it is not read as part of the field's name.
+export function Field({ label, hint, help, children, id }) {
+  if (help) {
+    return html`<div class="field"><span class="field-label-row"><label class="field-label" for=${id}>${label}</label><${HelpTip} text=${help} label=${`About ${label}`} /></span>${children}${hint ? html`<span class="field-hint">${hint}</span>` : null}</div>`;
+  }
   return html`<label class="field" for=${id}><span class="field-label">${label}</span>${children}${hint ? html`<span class="field-hint">${hint}</span>` : null}</label>`;
 }
 
 export function ErrorNote({ error }) {
   if (!error) return null;
   return html`<p class="error-note" role="alert"><${Icon} name="alert" size=${16} />${error}</p>`;
+}
+
+// One light line under a page title saying what you can do there.
+export function Lead({ children }) {
+  return html`<p class="page-lead">${children}</p>`;
+}
+
+// A small (?) that explains a term or option. Shows on hover or keyboard focus, and stays open on click or tap.
+let tipSeq = 0;
+export function HelpTip({ text, label = 'What does this mean?' }) {
+  const [pinned, setPinned] = useState(false);
+  const [hover, setHover] = useState(false);
+  const btn = useRef(null);
+  const tip = useRef(null);
+  const id = useMemo(() => `help-tip-${++tipSeq}`, []);
+  const shown = pinned || hover;
+
+  // Places the tip under the (?) (or above it near the bottom of the window), kept inside the window.
+  useLayoutEffect(() => {
+    if (!shown || !btn.current || !tip.current) return;
+    const b = btn.current.getBoundingClientRect();
+    const t = tip.current.getBoundingClientRect();
+    const edge = 8;
+    const left = Math.max(edge, Math.min(b.left + b.width / 2 - t.width / 2, innerWidth - t.width - edge));
+    let top = b.bottom + 8;
+    if (top + t.height > innerHeight - edge) top = Math.max(edge, b.top - 8 - t.height);
+    Object.assign(tip.current.style, { left: `${Math.round(left)}px`, top: `${Math.round(top)}px`, visibility: 'visible' });
+  }, [shown]);
+
+  useEffect(() => {
+    if (!shown) return undefined;
+    const close = () => { setPinned(false); setHover(false); };
+    const outside = (e) => { if (!btn.current?.contains(e.target) && !tip.current?.contains(e.target)) close(); };
+    const key = (e) => { if (e.key === 'Escape') close(); };
+    addEventListener('pointerdown', outside, true);
+    addEventListener('keydown', key);
+    addEventListener('scroll', close, true);
+    addEventListener('resize', close);
+    return () => {
+      removeEventListener('pointerdown', outside, true);
+      removeEventListener('keydown', key);
+      removeEventListener('scroll', close, true);
+      removeEventListener('resize', close);
+    };
+  }, [shown]);
+
+  return html`<span class="help">
+    <button type="button" class="help-btn" ref=${btn} aria-label=${label} aria-expanded=${shown ? 'true' : 'false'} aria-describedby=${shown ? id : undefined}
+      onClick=${(e) => { e.preventDefault(); e.stopPropagation(); setPinned((p) => !p); }}
+      onMouseEnter=${() => setHover(true)} onMouseLeave=${() => setHover(false)}
+      onFocus=${() => setHover(true)} onBlur=${() => setHover(false)}>?</button>
+    ${shown ? html`<span class="help-tip" role="tooltip" id=${id} ref=${tip}>${text}</span>` : null}
+  </span>`;
 }

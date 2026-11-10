@@ -1,6 +1,7 @@
 // Drives: every drive in your catalog, grouped by status, with filters.
 import { html, useState } from '../lib.js';
-import { TypeTile, StatusPill, HealthPill, BootPill, CapacityBar, UsageLine, LinkButton, Empty, Icon } from '../components.js';
+import { TypeTile, StatusPill, HealthPill, BootPill, CapacityBar, UsageLine, LinkButton, Empty, Icon, Lead, HelpTip } from '../components.js';
+import { LEADS, HELP } from '../help.js';
 import { typeById } from '/shared/drive-types.js';
 import { fmtAdvertised } from '/shared/format.js';
 
@@ -35,12 +36,14 @@ export function Drives({ data }) {
         <input id="drives-q" type="search" placeholder="Filter by name, brand, location or tag" value=${q} onInput=${(e) => setQ(e.target.value)} aria-label="Filter drives" /></label>
       <${LinkButton} kind="primary" icon="plus" href="#/add">Add drive</${LinkButton}>
     </header>
+    <${Lead}>${LEADS.drives}</${Lead}>
 
     <div class="chips" role="group" aria-label="Status">
       ${FILTERS.map((x) => {
         const n = data.drives.filter(x.test).length;
         return html`<button type="button" class=${`chip ${filter === x.id ? 'chip-on' : ''}`} aria-pressed=${filter === x.id} onClick=${() => setFilter(x.id)}>${x.name}<span class="chip-n">${n}</span></button>`;
       })}
+      <span class="chips-help"><${HelpTip} text=${HELP.statuses} label="What the statuses mean" /></span>
     </div>
 
     ${!data.drives.length ? html`<div class="card card-body"><${Empty} title="No drives yet">Add a drive yourself, or plug one in and add it from Home with its details filled in.</${Empty}></div>` : null}

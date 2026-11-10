@@ -1,6 +1,7 @@
 // Scan: run and watch scans, pick drives, and set what scans record.
 import { html, useState, useEffect, api } from '../lib.js';
-import { Icon, TypeTile, Card, Button, Empty, ErrorNote, CapacityBar } from '../components.js';
+import { Icon, TypeTile, Card, Button, Empty, ErrorNote, CapacityBar, Lead, HelpTip } from '../components.js';
+import { LEADS, HELP } from '../help.js';
 import { fmtBytes, fmtNumber, fmtSeconds, timeAgo } from '/shared/format.js';
 
 export function Scan({ data }) {
@@ -31,7 +32,7 @@ export function Scan({ data }) {
   const a = status.active;
 
   return html`<div class="page">
-    <div><h1>Scan</h1><p class="muted mt0">Records file names, folders, sizes and dates. File contents are never copied.</p></div>
+    <div><h1>Scan</h1><${Lead}>${LEADS.scan}</${Lead}></div>
     <${ErrorNote} error=${error} />
     <div class="columns">
       <div class="col-main">
@@ -85,17 +86,17 @@ export function Scan({ data }) {
       </div>
 
       <div class="col-side">
-        <${Card} id="h-opts" title="Scan options">
+        <${Card} id="h-opts" title="Scan options" help=${HELP.scanOptions}>
           ${settings ? html`<div class="stack">
-            ${[['media', 'Photo and video details', 'Reads small file headers: resolution, duration, date taken.'],
-               ['fingerprint', 'Quick fingerprint', 'Reads up to 128 KB per file to spot the same file on other drives.'],
-               ['hidden', 'Hidden and system files', 'Listed, but hidden in the file browser until you show them.']].map(([k, label, hint]) => html`
-              <label class="check-row" for=${`opt-${k}`}><input id=${`opt-${k}`} type="checkbox" checked=${settings[k]} onChange=${(e) => save({ [k]: e.target.checked })} />
-                <span><strong>${label}</strong><span class="small muted">${hint}</span></span></label>`)}
-            <label class="check-row" for="opt-keep"><span><strong>Scan history</strong><span class="small muted">Older scans of a drive are removed automatically.</span></span>
-              <select id="opt-keep" value=${settings.keepScans} onChange=${(e) => save({ keepScans: Number(e.target.value) })}>${[1, 2, 3, 5, 10].map((n) => html`<option value=${n}>Keep ${n}</option>`)}</select></label>
+            ${[['media', 'Photo and video details', 'Reads small file headers: resolution, duration, date taken.', HELP.mediaDetails],
+               ['fingerprint', 'Quick fingerprint', 'Reads up to 128 KB per file to spot the same file on other drives.', HELP.fingerprints],
+               ['hidden', 'Hidden and system files', 'Listed, but hidden in the file browser until you show them.', HELP.hiddenFiles]].map(([k, label, hint, help]) => html`
+              <div class="check-line"><label class="check-row" for=${`opt-${k}`}><input id=${`opt-${k}`} type="checkbox" checked=${settings[k]} onChange=${(e) => save({ [k]: e.target.checked })} />
+                <span><strong>${label}</strong><span class="small muted">${hint}</span></span></label><${HelpTip} text=${help} label=${`About ${label}`} /></div>`)}
+            <div class="check-line"><label class="check-row" for="opt-keep"><span><strong>Scan history</strong><span class="small muted">Older scans of a drive are removed automatically.</span></span>
+              <select id="opt-keep" value=${settings.keepScans} onChange=${(e) => save({ keepScans: Number(e.target.value) })}>${[1, 2, 3, 5, 10].map((n) => html`<option value=${n}>Keep ${n}</option>`)}</select></label><${HelpTip} text=${HELP.keepScans} label="About scan history" /></div>
             <div class="divider"></div>
-            <strong class="small">Skip these folders</strong>
+            <strong class="small">Skip these folders<${HelpTip} text=${HELP.exclude} label="About skipped folders" /></strong>
             <div class="pills">
               ${settings.exclude.map((x) => html`<span class="tag tag-x mono">${x}<button type="button" class="icon-btn icon-btn-xs" aria-label=${`Stop skipping ${x}`} onClick=${() => save({ exclude: settings.exclude.filter((y) => y !== x) })}><${Icon} name="x" size=${12} /></button></span>`)}
               ${!settings.exclude.length ? html`<span class="small muted">Nothing skipped.</span>` : null}
