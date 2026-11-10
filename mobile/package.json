@@ -1,0 +1,19 @@
+{
+  "name": "driveatlas-mobile",
+  "version": "0.1.0",
+  "private": true,
+  "description": "DriveAtlas for Android: the same interface as the PC app, packaged with Capacitor.",
+  "type": "module",
+  "scripts": {
+    "www": "node build-www.mjs",
+    "sync": "node build-www.mjs && cap sync android"
+  },
+  "dependencies": {
+    "@capacitor/android": "^7.0.0",
+    "@capacitor/core": "^7.0.0"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^7.0.0"
+  },
+  "license": "SEE LICENSE IN ../LICENSE.md"
+}

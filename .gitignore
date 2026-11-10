@@ -12,6 +12,7 @@
 !/DriveAtlas.cmd
 !/app/
 !/.github/
+!/mobile/
 
 # 2. Inside app/, allow only what runs.
 /app/*
@@ -24,11 +25,18 @@
 /app/scripts/*
 !/app/scripts/install.ps1
 
-# 3. Inside .github/, allow only the pictures the README shows.
+# 3. Inside .github/, allow only the pictures the README shows and the build workflows.
 /.github/*
 !/.github/readme/
+!/.github/workflows/
 
-# 4. Never publish these, even inside the folders above.
+# 4. The Android app: only its sources. www/, android/ and node_modules/ are made by the build.
+/mobile/*
+!/mobile/package.json
+!/mobile/capacitor.config.json
+!/mobile/build-www.mjs
+
+# 5. Never publish these, even inside the folders above.
 *.md
 !/README.md
 !/LICENSE.md

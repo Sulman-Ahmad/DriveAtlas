@@ -39,7 +39,8 @@ export function Settings({ onTheme, onSignedOut, onStopped }) {
             <div class="kv-row"><dt>Catalog</dt><dd class="mono small break">${s.dataDir}</dd></div>
             <div class="kv-row"><dt>Log file</dt><dd class="mono small break">${s.logPath}</dd></div>
           </dl>
-          <div class="card-body about-intro"><a class="link" href="#/about">What DriveAtlas does and how to use it</a></div>
+          <div class="card-body about-intro"><a class="link" href="#/about">What DriveAtlas does and how to use it</a>
+            <button type="button" class="link small sign-out" onClick=${async () => { await api('POST', '/api/logout').catch(() => {}); onSignedOut(); }}>Sign out</button></div>
           <${StopHub} onStopped=${onStopped} />
         </${Card}>
       </div>

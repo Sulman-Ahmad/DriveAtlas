@@ -1,7 +1,7 @@
 // App root: sign-in gate, sidebar, routing, live updates and plug-in toasts.
 import { html, render, useState, useEffect, useRef, api } from './lib.js';
 import { Icon } from './components.js';
-import { Setup, Login, AboutPage } from './screens/welcome.js';
+import { Setup, Login, AboutPage, PhoneStart } from './screens/welcome.js';
 import { Home } from './screens/home.js';
 import { Drives } from './screens/drives.js';
 import { AddDrive } from './screens/add.js';
@@ -182,4 +182,6 @@ function Main({ state, onSignedOut, onStopped, onTheme }) {
   </div>`;
 }
 
-render(html`<${App} />`, document.getElementById('app'));
+// Inside the Android app there is no hub on the phone itself; it starts with pairing instead.
+const IS_PHONE_APP = Boolean(window.Capacitor && typeof window.Capacitor.isNativePlatform === 'function' && window.Capacitor.isNativePlatform());
+render(IS_PHONE_APP ? html`<${PhoneStart} />` : html`<${App} />`, document.getElementById('app'));

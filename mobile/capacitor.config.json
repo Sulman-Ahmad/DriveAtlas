@@ -1,0 +1,13 @@
+{
+  "appId": "io.github.sulmanahmad.driveatlas",
+  "appName": "DriveAtlas",
+  "webDir": "www",
+  "server": {
+    "androidScheme": "https"
+  },
+  "android": {
+    "allowMixedContent": false,
+    "captureInput": true,
+    "webContentsDebuggingEnabled": false
+  }
+}

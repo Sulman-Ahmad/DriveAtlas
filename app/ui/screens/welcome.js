@@ -137,3 +137,19 @@ export function Login({ onDone }) {
     </form>
   </${Shell}>`;
 }
+
+// The Android app's first screen until pairing arrives: the introduction, then pairing with the laptop.
+export function PhoneStart() {
+  const [pairing, setPairing] = useState(false);
+  return html`<main class="welcome"><div class="welcome-card welcome-wide">
+    <${IntroContent} />
+    ${pairing
+      ? html`<div class="callout callout-accent" role="status"><${Icon} name="laptop" size=${20} />
+          <div class="grow"><strong>Pairing arrives in the next update</strong>
+            <div class="small">You will open DriveAtlas on your laptop, go to Settings, Phone and helper PCs, and scan the QR code shown there. The phone then keeps its own copy of your catalog and syncs on your home Wi-Fi.</div></div></div>`
+      : null}
+    <div class="intro-actions">
+      <button type="button" class="btn btn-primary" onClick=${() => setPairing(true)}><${Icon} name="laptop" size=${16} />Pair with my laptop</button>
+    </div>
+  </div></main>`;
+}
