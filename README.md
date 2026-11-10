@@ -18,6 +18,11 @@ Use it on your Android phone alone, on your Windows PC, or both kept in sync. No
 
 </div>
 
+<p align="center">
+  <a href="https://sulman-ahmad.github.io/DriveAtlas/#intro"><img src=".github/readme/intro-poster.jpg" width="760" alt="Watch the 22-second intro: which drive has the wedding videos?"></a><br>
+  <sub>&#9654; <a href="https://sulman-ahmad.github.io/DriveAtlas/#intro">Watch the 22-second intro</a></sub>
+</p>
+
 <br>
 
 <picture>
@@ -41,7 +46,9 @@ DriveAtlas keeps one catalog of every storage device you own. Plug a drive in on
 
 ## Download
 
-**DriveAtlas 0.4.0 beta 1** is out for testing: [Releases](https://github.com/Sulman-Ahmad/DriveAtlas/releases).
+<a href="https://sulman-ahmad.github.io/DriveAtlas/"><img src=".github/readme/download-qr.svg" width="150" align="right" alt="QR code to the DriveAtlas download page"></a>
+
+**DriveAtlas 0.4.0 beta 1** is out for testing. One link for both apps: **[sulman-ahmad.github.io/DriveAtlas](https://sulman-ahmad.github.io/DriveAtlas/)** shows the right download for your device. On your PC? Scan the QR code with your phone. All versions are on [Releases](https://github.com/Sulman-Ahmad/DriveAtlas/releases).
 
 | | |
 | --- | --- |

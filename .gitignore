@@ -25,10 +25,11 @@
 /app/scripts/*
 !/app/scripts/install.ps1
 
-# 3. Inside .github/, allow only the pictures the README shows and the build workflows.
+# 3. Inside .github/, allow only the pictures the README shows, the download page and the build workflows.
 /.github/*
 !/.github/readme/
 !/.github/workflows/
+!/.github/pages/
 
 # 4. The Android app: only its sources. www/, android/ and node_modules/ are made by the build.
 /mobile/*

@@ -1,0 +1,38 @@
+name: Download page
+
+# Publishes .github/pages (the download page with the intro video) to GitHub Pages:
+# https://sulman-ahmad.github.io/DriveAtlas/
+# Pages needs the repository to be public (or a paid plan) and Settings > Pages > Source set to "GitHub Actions";
+# until then this job is skipped. The page finds the newest release by itself, so a new release needs no redeploy.
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/pages/**'
+      - '.github/workflows/pages.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    if: ${{ !github.event.repository.private }}
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: .github/pages
+      - id: deployment
+        uses: actions/deploy-pages@v4
