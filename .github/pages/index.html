@@ -3,10 +3,10 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>DriveAtlas: know every drive you own</title>
-<meta name="description" content="A private catalog of every drive you own and every file on it, searchable even when the drive is in a drawer. Free beta for Windows and Android.">
-<meta property="og:title" content="DriveAtlas: which drive has the wedding videos?">
-<meta property="og:description" content="Search every drive you own, even the ones in a drawer. Free beta for Windows and Android. No cloud.">
+<title>DriveAtlas: find any file on any drive you own</title>
+<meta name="description" content="Where's your CV? Your trip photos? The wedding videos? DriveAtlas keeps a private catalog of every drive you own and every file on it, so one search finds it, even when the drive is in a drawer. Free beta for Windows and Android.">
+<meta property="og:title" content="Where's your CV? Your trip photos? The wedding videos? DriveAtlas knows.">
+<meta property="og:description" content="One search finds any file on any drive you own, even the ones in a drawer, and tells you where that drive is. Private by design. Free beta for Windows and Android.">
 <meta property="og:image" content="https://sulman-ahmad.github.io/DriveAtlas/media/driveatlas-intro.jpg">
 <meta property="og:type" content="website">
 <meta name="twitter:card" content="summary_large_image">
@@ -21,8 +21,10 @@ header { padding: 28px 0 0; }
 .brand { display: flex; align-items: center; gap: 12px; font-weight: 650; font-size: 21px; color: var(--text); text-decoration: none; }
 .brand img { width: 40px; height: 40px; }
 .hero { display: grid; grid-template-columns: 1.1fr .9fr; gap: 48px; align-items: center; padding: 56px 0 40px; }
-h1 { font-size: clamp(38px, 6vw, 62px); line-height: 1.04; letter-spacing: -.03em; margin: 0 0 18px; }
+h1 { font-size: clamp(36px, 5.6vw, 56px); line-height: 1.04; letter-spacing: -.03em; margin: 0 0 18px; }
 h1 em { font-style: normal; color: var(--accent); }
+h1 .q { display: block; }
+.answer { font-size: clamp(21px, 2.4vw, 26px); line-height: 1.3; font-weight: 650; letter-spacing: -.01em; color: var(--text); margin: 0 0 14px; max-width: 26em; }
 .lead { color: var(--muted); font-size: 20px; margin: 0 0 28px; max-width: 34em; }
 .badge { display: inline-block; padding: 4px 12px; border-radius: 999px; background: #113A35; color: var(--accent); font-weight: 650; font-size: 14px; margin-bottom: 18px; }
 .ctas { display: flex; flex-wrap: wrap; gap: 12px; }
@@ -55,8 +57,9 @@ footer { border-top: 1px solid var(--border); margin-top: 30px; padding: 26px 0 
   <div class="hero">
     <div>
       <span class="badge" id="version">Free beta</span>
-      <h1>Which drive has the <em>wedding videos?</em></h1>
-      <p class="lead">DriveAtlas keeps one private catalog of every drive you own, and every file on it. Search them all, even the ones sitting in a drawer, and see which shelf each one is on.</p>
+      <h1><span class="q">Where’s your CV?</span> <span class="q">Your trip photos?</span> <span class="q">The <em>wedding videos?</em></span></h1>
+      <p class="answer">One search finds it on any drive, and tells you where that drive is: the shelf, the drawer or the backpack.</p>
+      <p class="lead">DriveAtlas keeps one private catalog of every USB stick, SD card, hard drive, SSD and NVMe you own, your laptop and phone included, and every file on them. Search them all, even the ones sitting in a drawer. Your catalog stays on your devices, and backs up, encrypted, to your own cloud folder if you like.</p>
       <div class="ctas" id="ctas">
         <a class="btn primary" id="get-android" href="https://github.com/Sulman-Ahmad/DriveAtlas/releases"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="7" y="2.5" width="10" height="19" rx="2.5"/><path d="M11 18.5h2"/></svg><span>Get it for Android <small>APK</small></span></a>
         <a class="btn" id="get-windows" href="https://github.com/Sulman-Ahmad/DriveAtlas/releases"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></svg><span>Get it for Windows <small>zip</small></span></a>
