@@ -55,7 +55,14 @@ export async function link({ address, code }) {
   const info = await phoneInfo();
   const key = await pairKey(c);
   const env = await seal(key, me, 'pair', 'req', { name: info.name, platform: 'android', role: 'phone' });
-  const reply = await open(key, me, 'pair', 'res', await request(`http://${addr.host}:${addr.port}/pair`, { json: { deviceId: me, env } }, 30000));
+  let answer;
+  try {
+    answer = await request(`http://${addr.host}:${addr.port}/pair`, { json: { deviceId: me, env } }, 30000);
+  } catch (err) {
+    if (err.status !== 503) throw err;
+    throw fail(503, `Could not reach DriveAtlas on your PC at ${addr.host}. Check the address and that both are on the same Wi-Fi. If they are, Windows on the PC is probably keeping the phone out: DriveAtlas on the PC shows the fix next to the link code.`);
+  }
+  const reply = await open(key, me, 'pair', 'res', answer);
   const t = Date.now();
   await db.tx([
     { sql: "UPDATE linked_devices SET revoked_at = ?, device_key = NULL WHERE role = 'pc' AND id != ?", params: [t, reply.hubId] },

@@ -1,6 +1,7 @@
 // The Android app's first start, unlock and linking screens.
 import { html, useState, useEffect, api } from '../lib.js';
-import { Icon, Field, ErrorNote } from '../components.js';
+import { Icon, Field, ErrorNote, HelpTip } from '../components.js';
+import { HELP } from '../help.js';
 import { IntroContent, Shell } from './welcome.js';
 import { RestorePanel } from './phone-backups.js';
 
@@ -117,6 +118,7 @@ export function PhoneLink({ onDone, onBack, onSkip, embedded = false }) {
       <${Field} label="Link code" id="ph-code" hint="16 letters and numbers, valid for 2 minutes."><input id="ph-code" value=${code} onInput=${(e) => setCode(e.target.value)} autocomplete="off" autocapitalize="characters" spellcheck="false" required maxlength="24" /></${Field}>
       <${ErrorNote} error=${error} />
       <button class="btn btn-primary btn-block" type="submit" disabled=${busy}>${busy ? 'Linking and syncing…' : 'Link'}</button>
+      <p class="small muted mt0">Can’t connect?<${HelpTip} text=${HELP.phoneCantConnect} label="Why the phone can’t connect" /></p>
       ${onSkip ? html`<button type="button" class="btn btn-secondary btn-block" onClick=${onSkip} disabled=${busy}>Link later</button>` : null}
       ${onBack ? html`<button type="button" class="link small" onClick=${onBack}>Back</button>` : null}
     </form>

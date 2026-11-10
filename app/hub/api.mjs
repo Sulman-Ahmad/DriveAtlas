@@ -20,6 +20,7 @@ import { browse, search, entryDetail, openInExplorer, currentScans, scanHistory 
 import { uuid, plainObject, driveInput, searchInput, browseInput, folderPath, text, int, bool, oneOf } from './validate.mjs';
 import { RateLimiter, LoginGuard } from './ratelimit.mjs';
 import { findSmartctl, installSmartctl, readHealthElevated, applyHealth, healthHistory } from './health.mjs';
+import { networkCheck, openWindowsPage } from './network.mjs';
 import {
   rememberBackupKey, hasBackupKey, backupSettings, createBackup, recentBackups, stageRestore, moveCatalog, pruneBackups, MAX_BACKUP_BYTES, backupRunning
 } from './backup.mjs';
@@ -329,6 +330,15 @@ export function createHub({ db, watcher, scans, lan, restart, stop }) {
   router.on('GET', '/api/devices', () => ({ ...lan.status(), devices: lan.devices() }));
   router.on('POST', '/api/devices/link', async (ctx) => { throttle(ctx, 'link'); return lan.beginPairing(); });
   router.on('POST', '/api/devices/:id/unlink', async (ctx) => { await lan.unlink(uuid(ctx.params.id, 'device')); return { ok: true }; });
+  // Whether Windows lets a phone on the Wi-Fi reach this PC (network type and firewall rules; read-only).
+  router.on('GET', '/api/devices/network', async () => {
+    try { return await networkCheck(lan.status().addresses); } catch (e) { return { network: null, publicNetwork: null, firewall: 'unknown', error: e.message }; }
+  });
+  router.on('POST', '/api/devices/open-settings', async (ctx) => {
+    const page = oneOf(plainObject(await readJson(ctx.req)).page, 'Page', ['network', 'firewall']);
+    if (!page) throw httpError(400, 'Choose which settings page to open.');
+    return { ok: TEST_MODE ? true : openWindowsPage(page), testMode: TEST_MODE };
+  });
 
   router.on('GET', '/api/health', () => ({ smartctl: findSmartctl() }));
   router.on('POST', '/api/health/read', async (ctx) => {

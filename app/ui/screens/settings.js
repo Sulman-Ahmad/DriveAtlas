@@ -61,12 +61,17 @@ function DevicesCard() {
   const [now, setNow] = useState(Date.now());
   const [msg, setMsg] = useState('');
   const [error, setError] = useState('');
+  const [net, setNet] = useState(null);
   const load = () => api('GET', '/api/devices').then((r) => { setD(r); return r; }).catch((e) => setError(e.message));
-  useEffect(() => { load(); }, []);
+  const checkNetwork = () => api('GET', '/api/devices/network').then(setNet).catch(() => {});
+  useEffect(() => { load(); checkNetwork(); }, []);
   useEffect(() => {
     if (!pair) return undefined;
+    let ticks = 0;
     const t = setInterval(async () => {
       setNow(Date.now());
+      // Windows may ask about the firewall right after the link code appears; check again so the advice follows.
+      if (++ticks % 5 === 0) checkNetwork();
       const r = await load();
       if (r && r.devices.length > pair.before) {
         const fresh = r.devices[r.devices.length - 1];
@@ -78,7 +83,7 @@ function DevicesCard() {
   }, [pair]);
   async function start() {
     setError(''); setMsg('');
-    try { const r = await api('POST', '/api/devices/link'); setPair({ ...r, before: d ? d.devices.length : 0 }); setNow(Date.now()); } catch (e) { setError(e.message); }
+    try { const r = await api('POST', '/api/devices/link'); setPair({ ...r, before: d ? d.devices.length : 0 }); setNow(Date.now()); checkNetwork(); } catch (e) { setError(e.message); }
   }
   async function unlink(dev) {
     if (!window.confirm(`Unlink ${dev.name}? It keeps its own copy of the catalog but stops syncing with this PC.`)) return;
@@ -96,13 +101,57 @@ function DevicesCard() {
       ${pair ? html`<div class="link-code" role="status">
           <div class="small muted">On your phone, open DriveAtlas, choose Link with a PC, and type:</div>
           <div class="kv"><dt>PC address</dt><dd class="mono big">${pair.address}</dd><dt>Link code</dt><dd class="mono big">${pair.code}</dd></div>
-          <div class="small muted">Valid for ${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')}. Windows may ask whether DriveAtlas (Node.js) may use private networks: choose Allow.</div>
+          <div class="small muted">Valid for ${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')}. Your phone must be on the same Wi-Fi as this PC.</div>
         </div>`
         : html`<div><${Button} kind="primary" icon="phone" onClick=${start}>Link a phone</${Button}></div>`}
+      <${NetworkNote} net=${net} pairing=${Boolean(pair)} />
+      <p class="small muted mt0">Phone can’t connect?<${HelpTip} text=${HELP.firewall} label="Why a phone can’t connect" /></p>
       ${msg ? html`<p class="small" role="status">${msg}</p>` : null}
       <${ErrorNote} error=${error} />
     </div>
   </${Card}>`;
+}
+
+// What Windows does about phones on the Wi-Fi: a public network or a firewall rule can keep them out.
+function NetworkNote({ net, pairing }) {
+  const [msg, setMsg] = useState('');
+  if (!net) return null;
+  const name = net.publicNetwork || net.network || 'this network';
+  async function open(page) {
+    setMsg('');
+    try {
+      const r = await api('POST', '/api/devices/open-settings', { page });
+      setMsg(r.testMode ? 'Test mode: Windows settings were not opened.'
+        : page === 'network' ? 'Windows Settings is open. Open your Wi-Fi’s properties and choose Private network.'
+          : 'Allowed apps is open. Choose Change settings, find Node.js JavaScript Runtime and tick Private.');
+    } catch (e) { setMsg(e.message); }
+  }
+  const buttons = (network) => html`<div class="inline-form">
+    ${network ? html`<${Button} icon="settings" onClick=${() => open('network')}>Open network settings</${Button}>` : null}
+    <${Button} icon="lock" onClick=${() => open('firewall')}>Open firewall settings</${Button}></div>`;
+  let text = null;
+  let actions = null;
+  let plain = false;
+  if (net.publicNetwork && net.firewall !== 'allowed' && net.firewall !== 'off') {
+    text = html`<strong>Windows treats “${name}” as a public network, so it keeps your phone out.</strong> Make it private: in Windows Settings › Network & internet, open your Wi-Fi’s properties and choose <strong>Private network</strong>. Then link again; if Windows asks about Node.js, tick <strong>Private networks</strong> and choose <strong>Allow</strong>.`;
+    actions = buttons(true);
+  } else if (net.publicNetwork) {
+    text = html`<strong>Windows treats “${name}” as a public network.</strong> Linking works, because Node.js (the program DriveAtlas runs in) is allowed on public networks, but that also lets other devices reach it on café or hotel Wi-Fi. Safer: make “${name}” a <strong>private network</strong> in Windows Settings › Network & internet, then in the firewall’s Allowed apps tick only <strong>Private</strong> for Node.js JavaScript Runtime.`;
+    actions = buttons(true);
+  } else if (net.firewall === 'blocked') {
+    text = html`<strong>Windows Firewall is blocking DriveAtlas on “${name}”, so your phone can’t connect.</strong> Open firewall settings, choose <strong>Change settings</strong>, find <strong>Node.js JavaScript Runtime</strong>, tick <strong>Private</strong> and choose OK.`;
+    actions = buttons(false);
+  } else if (pairing && net.firewall === 'ask') {
+    plain = true;
+    text = html`Windows may now ask whether <strong>Node.js JavaScript Runtime</strong> can use the network. Tick <strong>Private networks</strong>, leave Public unticked, and choose <strong>Allow</strong>.`;
+  } else if (pairing && (net.firewall === 'allowed' || net.firewall === 'off')) {
+    return html`<p class="small muted mt0 with-icon"><${Icon} name="check" size=${15} /><span>Windows lets your phone reach this PC on “${name}”.</span></p>`;
+  }
+  if (!text) return null;
+  return html`<div class=${`callout small ${plain ? 'callout-plain' : 'callout-caution'}`} role="note">
+    <${Icon} name=${plain ? 'lock' : 'alert'} size=${18} />
+    <div class="grow stack-sm"><div>${text}</div>${actions}${msg ? html`<div class="muted" role="status">${msg}</div>` : null}</div>
+  </div>`;
 }
 
 // Stops the hub after a confirm step. Open windows switch to the "stopped" screen.

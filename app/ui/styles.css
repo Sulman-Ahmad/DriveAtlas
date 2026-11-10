@@ -349,6 +349,8 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .tile-solid { background: var(--accent); color: var(--on-accent); }
 .callout-plain { background: var(--surface2); color: var(--muted); align-items: flex-start; flex-wrap: nowrap; }
 .callout-plain > .icon { margin-top: 1px; }
+.callout-caution { background: var(--warn-soft); align-items: flex-start; flex-wrap: nowrap; }
+.callout-caution > .icon { color: var(--warn); margin-top: 1px; }
 .phone-card { gap: 16px; }
 .qr-scan { display: flex; flex-direction: column; gap: 10px; }
 .qr-view { position: relative; border-radius: 16px; overflow: hidden; background: #0B1110; aspect-ratio: 1 / 1; }
