@@ -18,6 +18,14 @@ on:
 permissions:
   contents: write
 
+# Library downloads from the internet sometimes time out on GitHub's machines: wait longer and retry.
+env:
+  GRADLE_NET: >-
+    -Dorg.gradle.internal.http.connectionTimeout=120000
+    -Dorg.gradle.internal.http.socketTimeout=120000
+    -Dorg.gradle.internal.repository.max.retries=6
+    -Dorg.gradle.internal.repository.initial.backoff=2000
+
 concurrency:
   group: android-${{ github.ref }}
   cancel-in-progress: true
@@ -70,7 +78,7 @@ jobs:
         working-directory: mobile/android
         run: |
           chmod +x gradlew
-          ./gradlew assembleRelease --no-daemon --stacktrace
+          ./gradlew assembleRelease --no-daemon --stacktrace $GRADLE_NET || ./gradlew assembleRelease --no-daemon --stacktrace $GRADLE_NET
 
       - name: Sign the APK
         if: env.HAS_KEY == 'true'
@@ -98,7 +106,7 @@ jobs:
         run: |
           echo "::warning::Signing key secrets are not set, so this APK uses a throwaway key and is not published to Releases."
           chmod +x gradlew
-          ./gradlew assembleDebug --no-daemon --stacktrace
+          ./gradlew assembleDebug --no-daemon --stacktrace $GRADLE_NET || ./gradlew assembleDebug --no-daemon --stacktrace $GRADLE_NET
           mkdir -p ../../dist
           cp app/build/outputs/apk/debug/app-debug.apk "../../dist/DriveAtlas-${VERSION_NAME}-unsigned-test.apk"
 
