@@ -19,8 +19,8 @@ Use it on your Android phone alone, on your Windows PC, or both kept in sync. No
 </div>
 
 <p align="center">
-  <a href="https://sulman-ahmad.github.io/DriveAtlas/#intro"><img src=".github/readme/intro-poster.jpg" width="760" alt="Watch the 22-second intro: which drive has the wedding videos?"></a><br>
-  <sub>&#9654; <a href="https://sulman-ahmad.github.io/DriveAtlas/#intro">Watch the 22-second intro</a></sub>
+  <a href="https://sulman-ahmad.github.io/DriveAtlas/#intro"><img src=".github/readme/intro-poster.jpg" width="760" alt="Watch the 30-second intro: where is my CV, my trip photos, that setup file? DriveAtlas finds them on any drive"></a><br>
+  <sub>&#9654; <a href="https://sulman-ahmad.github.io/DriveAtlas/#intro">Watch the 30-second intro</a></sub>
 </p>
 
 <br>
