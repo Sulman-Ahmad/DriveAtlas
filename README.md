@@ -42,18 +42,18 @@ DriveAtlas keeps one catalog of every storage device you own. Plug a drive in on
 - **Always up to date.** Scan a drive once; after that DriveAtlas picks up new, renamed and deleted files as they happen, and reads only what changed.
 - **Only names are stored.** File names, folders, sizes and dates. File contents are never copied.
 - **Your data stays with you.** It lives on your PC and your phone, synced over your own Wi-Fi.
-- **Light on your machine.** Uses the Node.js and Edge you already have. No Electron, no database server.
+- **Light on your machine.** One small download that opens in the Chrome or Edge you already have. No Electron, no database server.
 
 ## Download
 
 <a href="https://sulman-ahmad.github.io/DriveAtlas/"><img src=".github/readme/download-qr.svg" width="150" align="right" alt="QR code to the DriveAtlas download page"></a>
 
-**DriveAtlas 0.4.0 beta 1** is out for testing. One link for both apps: **[sulman-ahmad.github.io/DriveAtlas](https://sulman-ahmad.github.io/DriveAtlas/)** shows the right download for your device. On your PC? Scan the QR code with your phone. All versions are on [Releases](https://github.com/Sulman-Ahmad/DriveAtlas/releases).
+**DriveAtlas 0.4.0 beta 2** is out for testing. One link for both apps: **[sulman-ahmad.github.io/DriveAtlas](https://sulman-ahmad.github.io/DriveAtlas/)** shows the right download for your device. On your PC? Scan the QR code with your phone. All versions are on [Releases](https://github.com/Sulman-Ahmad/DriveAtlas/releases).
 
 | | |
 | --- | --- |
-| **Android** | `DriveAtlas-0.4.0-beta.1.apk`: open it on your phone and allow "Install unknown apps" once. Android 7.0 or newer. |
-| **Windows** | `DriveAtlas-Windows-0.4.0-beta.1.zip`: unzip it and double-click `DriveAtlas.vbs`. Needs [Node.js](https://nodejs.org) 22.13 or newer. |
+| **Windows** | `DriveAtlas-Windows-0.4.0-beta.2.exe`: double-click it. Node.js is included, so there is nothing else to install. Windows 10 or 11. |
+| **Android** | `DriveAtlas-0.4.0-beta.2.apk`: open it on your phone and allow "Install unknown apps" once. Android 7.0 or newer. |
 
 Use the same version on your PC and your phone. This is a beta: keep a backup (Settings › Backups) and tell us what you find.
 
@@ -143,7 +143,7 @@ Use the same version on your PC and your phone. This is a beta: keep a backup (S
 <img src=".github/readme/architecture.png" alt="The laptop hub holds the catalog; the phone syncs a full copy on your Wi-Fi">
 
 - **Hub on your PC.** A small Node.js process holds the catalog in a SQLite file, reads drive details through PowerShell and `smartctl`, and serves the app to this PC only (from Phase 2, also to your paired phone on your home network).
-- **App window on Windows.** The interface opens in its own Edge or Chrome app window, pinned to the Start menu. No browser tabs, no installer bloat.
+- **App window on Windows.** `DriveAtlas.exe` carries the whole app and the official Node.js installer in one file. It opens the interface in its own Chrome (or Edge) app window, adds itself to the Start menu and shows a tray icon with your drive count and space. No browser tabs, no installer bloat.
 - **Android app.** The same interface packaged as an APK. It works on its own with its own catalog, or links to your PC with one QR scan; then both keep the whole catalog and sync both ways on the same Wi-Fi. Only the entries that changed travel.
 - **Live updates.** After the first scan, Windows change notifications (and Android folder watching while the app is open) keep each file list current; no polling, so an idle drive costs nothing.
 - **Backups.** One encrypted backup file holds everything. Restore it on a new laptop and DriveAtlas comes back exactly as it was.
@@ -165,34 +165,36 @@ Use the same version on your PC and your phone. This is a beta: keep a backup (S
 | Hub | Node.js 24 built-ins only: `node:http`, `node:sqlite` with full-text search, `node:crypto`, worker threads, Windows change notifications (`fs.watch`) |
 | Drive data | PowerShell storage cmdlets, `smartctl` from smartmontools |
 | Interface | Preact + htm, plain CSS design tokens, hand-drawn SVG charts, a small QR code generator |
-| Windows shell | Edge/Chrome app window, Start menu and Startup shortcuts |
+| Windows shell | `DriveAtlas.exe`: a small C# launcher (.NET Framework, part of Windows) with a tray icon; Chrome or Edge app window; Start menu and Startup shortcuts |
 | Android | Capacitor, SQLite compiled to WebAssembly, a native Java plugin for storage, scanning, folder watching and fingerprint unlock, ZXing QR scanner |
-| Builds | GitHub Actions builds and signs the APK and packs the Windows zip for each release |
+| Builds | GitHub Actions builds and signs the APK, builds `DriveAtlas.exe` with the newest Node.js 24 LTS installer (checked against nodejs.org's SHA-256 list) and packs the Windows zip for each release |
 
 ## Getting started
 
 ### On your PC
 
-**You will need:** Windows 10 or 11, [Node.js](https://nodejs.org) 22.13 or newer, and Microsoft Edge or Google Chrome. Nothing else to install.
+**You will need:** Windows 10 or 11 with Google Chrome or Microsoft Edge. Node.js comes inside `DriveAtlas.exe`.
 
-1. Download `DriveAtlas-Windows-0.4.0-beta.1.zip` from [Releases](https://github.com/Sulman-Ahmad/DriveAtlas/releases) and unzip it (or clone this repository).
-2. Double-click **`DriveAtlas.vbs`**. DriveAtlas opens in its own window.
+1. Download `DriveAtlas-Windows-0.4.0-beta.2.exe` from [Releases](https://github.com/Sulman-Ahmad/DriveAtlas/releases) and double-click it. DriveAtlas isn't code-signed yet, so Windows SmartScreen may say "Windows protected your PC": click **More info**, then **Run anyway**.
+2. If your PC doesn't have Node.js 22.13 or newer, DriveAtlas offers to install it from the copy inside the exe (Windows asks for permission). DriveAtlas then opens in its own window, adds itself to the Start menu, and shows an icon in the system tray: hover it for your drive count and space, right-click it to open DriveAtlas or exit.
 3. Create your account, then add the drives listed under **Connected now**. Their details are filled in for you.
 4. Open a drive and choose **Scan now**. Afterwards, search its files from **Search**, even when the drive is unplugged.
 5. In **Settings**, choose a backup folder (ideally on another drive or a cloud folder) and turn on daily backups. **Read health now** shows wear and temperature after you approve the Windows prompt; install the free smartmontools from the same card for full details.
-6. Optional: add DriveAtlas to the Start menu (no admin needed):
+6. Optional: start DriveAtlas when you sign in to Windows (no admin needed):
 
    ```bash
-   powershell -ExecutionPolicy Bypass -File app/scripts/install.ps1
+   powershell -ExecutionPolicy Bypass -File "%LOCALAPPDATA%\DriveAtlas\app\scripts\install.ps1" -Startup
    ```
 
-   Add `-Startup` to start the hub when you sign in, or `-Uninstall` to remove the shortcuts.
+   Use `-Uninstall` to remove the shortcuts.
 
-Your catalog lives in `%LOCALAPPDATA%\DriveAtlas\data`, outside this folder, so updating the app never touches it. `DriveAtlas.cmd` starts the same app with a visible log window for troubleshooting.
+Your catalog lives in `%LOCALAPPDATA%\DriveAtlas\data`. A newer `DriveAtlas.exe` updates the app next to it and never touches the catalog.
+
+**From source or the zip** (needs [Node.js](https://nodejs.org) 22.13 or newer): unzip `DriveAtlas-Windows-0.4.0-beta.2.zip` or clone this repository, then double-click **`DriveAtlas.vbs`**. `DriveAtlas.cmd` starts the same app with a visible log window for troubleshooting, and `app/scripts/install.ps1` adds the shortcuts. To build `DriveAtlas.exe` yourself: `powershell -ExecutionPolicy Bypass -File build/Build-DriveAtlas.ps1 -NodeMsi <node-v24.x.y-x64.msi>`.
 
 ### On your phone
 
-1. Download `DriveAtlas-0.4.0-beta.1.apk` from [Releases](https://github.com/Sulman-Ahmad/DriveAtlas/releases) on your Android phone and open it.
+1. Download `DriveAtlas-0.4.0-beta.2.apk` from [Releases](https://github.com/Sulman-Ahmad/DriveAtlas/releases) on your Android phone and open it.
 2. Choose **Keep my catalog on this phone**, **Connect to DriveAtlas on my PC**, or **Restore from a backup**, then set a PIN (and fingerprint, if you like).
 3. To link with your PC: on the PC open **Settings › Phone and helper PCs › Link a phone**, then on the phone tap **Scan QR code**. Both must be on the same Wi-Fi; if Windows asks about Node.js, allow it on private networks.
 4. Allow **All files access** so DriveAtlas can record the phone's storage, its SD card and USB drives or SSDs plugged in through OTG.
@@ -201,8 +203,9 @@ Your catalog lives in `%LOCALAPPDATA%\DriveAtlas\data`, outside this folder, so 
 
 ```
 DriveAtlas/
-├── DriveAtlas.vbs             Double-click to start (no console window)
+├── DriveAtlas.vbs             Starts DriveAtlas from source (no console window)
 ├── DriveAtlas.cmd             Same, with a visible log window for troubleshooting
+├── build/                     DriveAtlas.exe: the Windows launcher (C#) and its build script
 ├── app/
 │   ├── hub/                   Node.js hub: web server, catalog database, drive detection, backups
 │   │   ├── ps/                PowerShell scripts that read disks and drive health (read-only)
@@ -210,7 +213,7 @@ DriveAtlas/
 │   ├── ui/                    The interface (Preact + htm, plain CSS)
 │   ├── shared/                Schema, sync and backup formats, drive types, shared by PC and phone
 │   ├── assets/                App icon
-│   └── scripts/install.ps1    Optional Start menu and Startup shortcuts
+│   └── scripts/install.ps1    Start menu and Startup shortcuts
 ├── mobile/                    The Android app (Capacitor project, native plugin, icons)
 ├── LICENSE.md
 └── README.md

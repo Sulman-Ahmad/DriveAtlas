@@ -2,10 +2,11 @@ name: Build and release
 
 # Builds the Android app on every change, signed with the same key each time (repository secrets
 # ANDROID_KEYSTORE_BASE64 and ANDROID_KEYSTORE_PASSWORD), so a new version installs over the old one and the
-# phone keeps its catalog. Every build is kept as a download on the run's page.
-# When the version in app/package.json and mobile/package.json has no release yet (for example 0.4.0-beta.1),
-# the build is published to GitHub Releases as "v<version>" with the APK and a Windows zip; versions with a
-# dash (beta) are marked as pre-releases.
+# phone keeps its catalog. Builds DriveAtlas.exe for Windows on a Windows machine, with the newest Node.js 24 LTS
+# installer inside it (checked against nodejs.org's SHA-256 list). Every build is kept as a download on the run's page.
+# When the version in app/package.json and mobile/package.json has no release yet (for example 0.4.0-beta.2),
+# the build is published to GitHub Releases as "v<version>" with DriveAtlas.exe, the APK and a Windows zip;
+# versions with a dash (beta) are marked as pre-releases.
 on:
   push:
     branches: [main]
@@ -14,6 +15,7 @@ on:
       - 'mobile/**'
       - 'DriveAtlas.vbs'
       - 'DriveAtlas.cmd'
+      - 'build/**'
       - '.github/workflows/android.yml'
   workflow_dispatch:
 
@@ -38,6 +40,12 @@ jobs:
     timeout-minutes: 40
     env:
       HAS_KEY: ${{ secrets.ANDROID_KEYSTORE_BASE64 != '' && secrets.ANDROID_KEYSTORE_PASSWORD != '' }}
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      version_name: ${{ steps.version.outputs.version_name }}
+      tag: ${{ steps.version.outputs.tag }}
+      release: ${{ steps.version.outputs.release }}
+      has_key: ${{ env.HAS_KEY }}
     steps:
       - uses: actions/checkout@v5
 
@@ -51,6 +59,7 @@ jobs:
           java-version: 21
 
       - name: Work out the version, and whether this build becomes a release
+        id: version
         run: |
           set -euo pipefail
           VERSION="$(node -p "require('./mobile/package.json').version")"
@@ -66,6 +75,7 @@ jobs:
           echo "TAG=${TAG}" >> "$GITHUB_ENV"
           echo "RELEASE=${RELEASE}" >> "$GITHUB_ENV"
           echo "VERSION_NAME=${VERSION_NAME}" >> "$GITHUB_ENV"
+          { echo "version=${VERSION}"; echo "version_name=${VERSION_NAME}"; echo "tag=${TAG}"; echo "release=${RELEASE}"; } >> "$GITHUB_OUTPUT"
           echo "Version ${VERSION_NAME}; release: ${RELEASE}"
 
       - name: Install Capacitor
@@ -142,12 +152,76 @@ jobs:
           retention-days: 30
           if-no-files-found: error
 
+  windows:
+    needs: build
+    runs-on: windows-latest
+    timeout-minutes: 20
+    env:
+      VERSION_NAME: ${{ needs.build.outputs.version_name }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+
+      - name: Download the newest Node.js 24 LTS installer and check it
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/node" && cd "$RUNNER_TEMP/node"
+          curl -fsSL --retry 4 -o index.json https://nodejs.org/dist/index.json
+          NODE_V="$(node -e "const r = JSON.parse(require('fs').readFileSync('index.json', 'utf8')).find((x) => x.version.startsWith('v24.') && x.lts && x.files.includes('win-x64-msi')); if (!r) process.exit(1); console.log(r.version)")"
+          curl -fsSL --retry 4 -O "https://nodejs.org/dist/${NODE_V}/node-${NODE_V}-x64.msi"
+          curl -fsSL --retry 4 -O "https://nodejs.org/dist/${NODE_V}/SHASUMS256.txt"
+          grep " node-${NODE_V}-x64.msi$" SHASUMS256.txt | sha256sum -c -
+          echo "NODE_MSI=$(cygpath -w "$RUNNER_TEMP/node/node-${NODE_V}-x64.msi")" >> "$GITHUB_ENV"
+          echo "NODE_V=${NODE_V}" >> "$GITHUB_ENV"
+          echo "Node.js ${NODE_V} installer verified"
+
+      - name: Build DriveAtlas.exe
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          powershell -NoProfile -ExecutionPolicy Bypass -File build\Build-DriveAtlas.ps1 -NodeMsi $env:NODE_MSI -OutDir dist -BuildNumber $env:GITHUB_RUN_NUMBER
+          if ($LASTEXITCODE -ne 0) { throw "build failed ($LASTEXITCODE)" }
+          $exe = "dist\DriveAtlas-Windows-$env:VERSION_NAME.exe"
+          Move-Item dist\DriveAtlas.exe $exe
+          # It starts on .NET and finds no running DriveAtlas to stop: exit code 1.
+          $p = Start-Process -FilePath $exe -ArgumentList '--exit' -Wait -PassThru
+          if ($p.ExitCode -ne 1) { throw "DriveAtlas.exe --exit returned $($p.ExitCode)" }
+          $mb = [math]::Round((Get-Item $exe).Length / 1MB, 1)
+          $sha = (Get-FileHash -Algorithm SHA256 $exe).Hash.ToLower()
+          "$exe : version $((Get-Item $exe).VersionInfo.ProductVersion), Node.js $env:NODE_V inside, $mb MB, SHA-256 $sha"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: DriveAtlas-Windows-exe-${{ env.VERSION_NAME }}
+          path: dist/*.exe
+          retention-days: 30
+          if-no-files-found: error
+
+  release:
+    needs: [build, windows]
+    if: needs.build.outputs.has_key == 'true' && needs.build.outputs.release == 'true'
+    runs-on: ubuntu-latest
+    env:
+      VERSION: ${{ needs.build.outputs.version }}
+      TAG: ${{ needs.build.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
       - name: Publish the release
-        if: env.HAS_KEY == 'true' && env.RELEASE == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
+          ls -l dist
           TITLE="DriveAtlas $(node -p "process.env.VERSION.replace(/-beta\.(\d+)$/, ' beta \$1').replace(/-rc\.(\d+)$/, ' release candidate \$1')")"
           PRE=""
           case "$VERSION" in *-*) PRE="--prerelease" ;; esac
@@ -156,8 +230,10 @@ jobs:
             echo
             echo "## Install"
             echo
+            echo "- **Windows:** download \`DriveAtlas-Windows-${VERSION}.exe\` and double-click it. Node.js is included: if your PC doesn't have it, DriveAtlas offers to install it. It then adds itself to the Start menu and shows an icon in the system tray. If Windows SmartScreen says \"Windows protected your PC\", click **More info** and **Run anyway** (DriveAtlas isn't code-signed yet). Your catalog stays where it is."
             echo "- **Android:** download \`DriveAtlas-${VERSION}.apk\` on your phone and open it (allow \"Install unknown apps\" once). It installs over an earlier version and keeps your catalog."
-            echo "- **Windows:** download \`DriveAtlas-Windows-${VERSION}.zip\`, unzip it, and double-click \`DriveAtlas.vbs\`. Needs Node.js 22.13 or newer from nodejs.org. Your catalog stays where it is."
+            echo "- **Windows zip, if you already have Node.js 22.13 or newer:** download \`DriveAtlas-Windows-${VERSION}.zip\`, unzip it, and double-click \`DriveAtlas.vbs\`."
             echo "- Use the same version on your PC and phone to sync."
           } > "$RUNNER_TEMP/notes.md"
-          gh release create "$TAG" dist/*.apk dist/*.zip --target "$GITHUB_SHA" $PRE --title "$TITLE" --notes-file "$RUNNER_TEMP/notes.md"
+          cat "$RUNNER_TEMP/notes.md"
+          gh release create "$TAG" dist/*.exe dist/*.apk dist/*.zip --target "$GITHUB_SHA" $PRE --title "$TITLE" --notes-file "$RUNNER_TEMP/notes.md"

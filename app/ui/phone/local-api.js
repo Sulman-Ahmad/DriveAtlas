@@ -12,7 +12,7 @@ import { DRIVE_TYPES, STATUSES, typeById, guessType, BOOT_KINDS, brandFromModel 
 import { advertisedFromSize } from '/shared/format.js';
 import { FLAG } from '/shared/kinds.js';
 
-export const VERSION = '0.4.0-beta.1';
+export const VERSION = '0.4.0-beta.2';
 export { openEvents };
 
 const HIDDEN_MASK = FLAG.HIDDEN | FLAG.SYSTEM;

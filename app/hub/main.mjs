@@ -5,8 +5,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 import {
-  PORT, HOST, OPEN_WINDOW, DATA_DIR, DB_PATH, VERSION, BACKGROUND, LOG_PATH, WINDOW_PROFILE, RESTARTED, TEST_MODE, APP_DIR
-} from './config.mjs';
+  PORT, HOST, OPEN_WINDOW, DATA_DIR, DB_PATH, VERSION, BACKGROUND, LOG_PATH, WINDOW_PROFILE, RESTARTED, TEST_MODE, APP_DIR, LAUNCHER_KEY } from './config.mjs';
 import { applyStagedRestore, startBackupScheduler } from './backup.mjs';
 import { openDb } from './db.mjs';
 import { createLan } from './lan.mjs';
@@ -96,11 +95,13 @@ function findBrowser() {
   const pf = process.env.ProgramFiles || 'C:\\Program Files';
   const pf86 = process.env['ProgramFiles(x86)'] || 'C:\\Program Files (x86)';
   const local = process.env.LOCALAPPDATA || '';
+  // Prefer Google Chrome; fall back to Edge only if Chrome is not found.
   return [
-    path.join(pf86, 'Microsoft', 'Edge', 'Application', 'msedge.exe'),
-    path.join(pf, 'Microsoft', 'Edge', 'Application', 'msedge.exe'),
     path.join(pf, 'Google', 'Chrome', 'Application', 'chrome.exe'),
-    path.join(local, 'Google', 'Chrome', 'Application', 'chrome.exe')
+    path.join(local, 'Google', 'Chrome', 'Application', 'chrome.exe'),
+    path.join(pf86, 'Google', 'Chrome', 'Application', 'chrome.exe'),
+    path.join(pf, 'Microsoft', 'Edge', 'Application', 'msedge.exe'),
+    path.join(pf86, 'Microsoft', 'Edge', 'Application', 'msedge.exe')
   ].find((p) => fs.existsSync(p));
 }
 
@@ -127,7 +128,8 @@ function restart() {
     const args = process.argv.slice(1).filter((a) => a !== '--open' && a !== '--restarted');
     if (!args.includes('--background')) args.push('--background');
     args.push('--restarted');
-    spawn(process.execPath, [...process.execArgv, ...args], { detached: true, stdio: 'ignore', env: process.env, cwd: APP_DIR, windowsHide: true }).unref();
+    const env = LAUNCHER_KEY ? { ...process.env, DRIVEATLAS_LAUNCHER_KEY: LAUNCHER_KEY } : process.env;
+    spawn(process.execPath, [...process.execArgv, ...args], { detached: true, stdio: 'ignore', env, cwd: APP_DIR, windowsHide: true }).unref();
     process.exit(0);
   }, 400);
 }

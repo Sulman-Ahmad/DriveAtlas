@@ -13,6 +13,7 @@
 !/app/
 !/.github/
 !/mobile/
+!/build/
 
 # 2. Inside app/, allow only what runs.
 /app/*
@@ -31,7 +32,12 @@
 !/.github/workflows/
 !/.github/pages/
 
-# 4. The Android app: only its sources. www/, android/ and node_modules/ are made by the build.
+# 4. The Windows launcher: its source and build script only. DriveAtlas.exe and app.zip are built into dist/.
+/build/*
+!/build/DriveAtlasLauncher.cs
+!/build/Build-DriveAtlas.ps1
+
+# 5. The Android app: only its sources. www/, android/ and node_modules/ are made by the build.
 /mobile/*
 !/mobile/package.json
 !/mobile/capacitor.config.json
@@ -39,7 +45,7 @@
 !/mobile/native/
 !/mobile/assets/
 
-# 5. Never publish these, even inside the folders above.
+# 6. Never publish these, even inside the folders above.
 *.md
 !/README.md
 !/LICENSE.md

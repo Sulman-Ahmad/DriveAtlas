@@ -47,5 +47,11 @@ export const WINDOW_PROFILE = path.join(BASE_DIR, 'window');
 // separate test catalog (DRIVEATLAS_DATA), so it can never run against your real catalog.
 export const TEST_MODE = process.env.DRIVEATLAS_TEST === '1' && Boolean(ENV_DATA);
 export const VERSION = JSON.parse(fs.readFileSync(path.join(APP_DIR, 'package.json'), 'utf8')).version;
+// DriveAtlas.exe (the Windows launcher) starts the hub with a random key of its own, so its tray icon can read the
+// drive summary and stop the hub without signing in. Read once and removed from the environment, so the
+// PowerShell and smartctl helpers the hub starts never see it (a restart passes it on explicitly).
+const launcherKey = String(process.env.DRIVEATLAS_LAUNCHER_KEY || '');
+delete process.env.DRIVEATLAS_LAUNCHER_KEY;
+export const LAUNCHER_KEY = /^[0-9a-f]{64}$/.test(launcherKey) ? launcherKey : null;
 
 fs.mkdirSync(DATA_DIR, { recursive: true });

@@ -6,7 +6,7 @@ import crypto from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { Transform } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
-import { APP_DIR, PORT, VERSION, DATA_DIR, LOG_PATH, TEST_MODE } from './config.mjs';
+import { APP_DIR, PORT, VERSION, DATA_DIR, LOG_PATH, TEST_MODE, LAUNCHER_KEY } from './config.mjs';
 import { Router, readJson, sendJson, parseCookies, serveFile, SECURITY_HEADERS } from './http.mjs';
 import {
   hasOwner, getOwner, createOwner, verifyPassword, changePassword, createSession, getSession, deleteSession, httpError
@@ -27,6 +27,14 @@ import {
 
 const COOKIE = 'da_session';
 const ALLOWED_HOSTS = new Set([`localhost:${PORT}`, `127.0.0.1:${PORT}`]);
+// The launcher's key (see config.mjs) opens only routes marked { launcher: true }, and only from this PC.
+const LOOPBACK = new Set(['127.0.0.1', '::1', '::ffff:127.0.0.1']);
+function launcherAllowed(req, route) {
+  if (!LAUNCHER_KEY || !route.opts.launcher || !LOOPBACK.has(req.socket.remoteAddress)) return false;
+  const given = Buffer.from(String(req.headers['x-driveatlas-launcher'] || ''));
+  const want = Buffer.from(LAUNCHER_KEY);
+  return given.length === want.length && crypto.timingSafeEqual(given, want);
+}
 const ALLOWED_ORIGINS = new Set([`http://localhost:${PORT}`, `http://127.0.0.1:${PORT}`]);
 const UI_DIR = path.join(APP_DIR, 'ui');
 const SHARED_DIR = path.join(APP_DIR, 'shared');
@@ -155,7 +163,7 @@ export function createHub({ db, watcher, scans, lan, live, restart, stop }) {
     broadcast('stopping', {});
     stop();
     return { ok: true, stopping: true };
-  });
+  }, { launcher: true });
 
   router.on('PUT', '/api/settings/backup', async (ctx) => {
     const body = plainObject(await readJson(ctx.req));
@@ -200,7 +208,7 @@ export function createHub({ db, watcher, scans, lan, live, restart, stop }) {
   }, { publicIfNoOwner: true });
 
   // ---- Drives and connected disks ----
-  router.on('GET', '/api/summary', () => ({ ...summary(db, watcher.disks), ready: watcher.ready }));
+  router.on('GET', '/api/summary', () => ({ ...summary(db, watcher.disks), ready: watcher.ready }), { launcher: true });
   router.on('GET', '/api/connected', () => ({ ready: watcher.ready, disks: connectedView(db, watcher.disks) }));
   router.on('POST', '/api/connected/refresh', async () => {
     await watcher.refresh();
@@ -498,7 +506,7 @@ export function createHub({ db, watcher, scans, lan, live, restart, stop }) {
       const token = parseCookies(req.headers.cookie)[COOKIE];
       const session = getSession(db, token);
       const open = route.opts.public || (route.opts.publicIfNoOwner && !hasOwner(db));
-      if (!open && !session) return sendJson(res, 401, { error: 'Please sign in.' });
+      if (!open && !session && !launcherAllowed(req, route)) return sendJson(res, 401, { error: 'Please sign in.' });
 
       const out = await route.handler({ req, res, params: route.params, session, token, url, ip });
       if (out && out.stream) return;
