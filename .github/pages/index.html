@@ -17,7 +17,10 @@
 html, body { margin: 0; background: var(--bg); color: var(--text); font: 17px/1.55 "Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system, Roboto, sans-serif; -webkit-font-smoothing: antialiased; }
 a { color: var(--accent); }
 .wrap { max-width: 1120px; margin: 0 auto; padding: 0 20px; }
-header { padding: 28px 0 0; }
+header.wrap { padding-top: 28px; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px 16px; }
+.navlink { color: var(--text); text-decoration: none; font-weight: 600; font-size: 15px; padding: 8px 16px; border: 1px solid var(--border); border-radius: 999px; white-space: nowrap; }
+.navlink:hover { border-color: var(--accent); color: var(--accent); }
+.more { color: var(--muted); font-size: 16px; margin: 18px 0 0; }
 .brand { display: flex; align-items: center; gap: 12px; font-weight: 650; font-size: 21px; color: var(--text); text-decoration: none; }
 .brand img { width: 40px; height: 40px; }
 .hero { display: grid; grid-template-columns: 1.1fr .9fr; gap: 48px; align-items: center; padding: 56px 0 40px; }
@@ -52,7 +55,7 @@ footer { border-top: 1px solid var(--border); margin-top: 30px; padding: 26px 0 
 </style>
 </head>
 <body>
-<header class="wrap"><a class="brand" href="./"><img src="media/logo.svg" alt="">DriveAtlas</a></header>
+<header class="wrap"><a class="brand" href="./"><img src="media/logo.svg" alt="">DriveAtlas</a><a class="navlink" href="guide/">How it works and FAQ</a></header>
 <main class="wrap">
   <div class="hero">
     <div>
@@ -97,6 +100,7 @@ footer { border-top: 1px solid var(--border); margin-top: 30px; padding: 26px 0 
         <li>On the PC: <strong>Settings › Phone and helper PCs › Link a phone</strong>. On the phone: <strong>Scan QR code</strong>.</li>
       </ol></div>
     </div>
+    <p class="more">New to DriveAtlas? The <a href="guide/">simple guide</a> explains it step by step, with screenshots and answers to common questions. You can also <a href="guide/DriveAtlas-Guide.pdf" download>save it as a PDF</a> to send to a friend.</p>
   </section>
 
   <section>
